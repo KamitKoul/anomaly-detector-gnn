@@ -120,54 +120,72 @@ def delta_r(eta1, phi1, eta2, phi2):
 
 
 ########################################
-# BUILD ΔR GRAPH
+# BUILD ΔR GRAPH (VECTORIZED)
 ########################################
 
-def build_deltaR_edges(particles):
-
-    edges = []
-
+def build_deltaR_edges(particles, threshold=DELTA_R_THRESHOLD):
+    """
+    Vectorized computation of delta R graph edges:
+      dr = sqrt((d_eta)^2 + (d_phi)^2) with periodic phi wrap-around.
+    Excludes self-loops and returns a [2, num_edges] long tensor.
+    """
     num_nodes = len(particles)
+    if num_nodes <= 1:
+        return torch.tensor([[0], [0]], dtype=torch.long)
 
-    for i in range(num_nodes):
-        for j in range(num_nodes):
+    eta = particles[:, 1]
+    phi = particles[:, 2]
 
-            if i == j:
-                continue
+    # Pairwise differences
+    d_eta = eta[:, None] - eta[None, :]
+    d_phi = np.abs(phi[:, None] - phi[None, :])
+    d_phi = np.where(d_phi > np.pi, 2 * np.pi - d_phi, d_phi)
 
-            eta1, phi1 = particles[i][1], particles[i][2]
-            eta2, phi2 = particles[j][1], particles[j][2]
+    dr = np.sqrt(d_eta**2 + d_phi**2)
 
-            dr = delta_r(eta1, phi1, eta2, phi2)
+    # Filter by threshold and exclude self-loops
+    mask = (dr < threshold) & ~np.eye(num_nodes, dtype=bool)
 
-            if dr < DELTA_R_THRESHOLD:
-                edges.append([i, j])
-
+    edges = np.argwhere(mask)
     if len(edges) == 0:
-        edges.append([0,0])
+        return torch.tensor([[0], [0]], dtype=torch.long)
 
-    edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
-
-    return edge_index
+    return torch.tensor(edges.T, dtype=torch.long).contiguous()
 
 
 ########################################
 # EVENT → GRAPH
 ########################################
 
-def event_to_graph(event):
-
+def event_to_graph(event, log_pt=True):
+    """
+    Transforms a raw collision event into a PyG Data graph object.
+    
+    1. Extracts visible particles [pT, eta, phi].
+    2. Computes event Missing Transverse Energy (MET).
+    3. Adds a global MET node with true physical azimuthal angle phi_MET.
+    4. Computes topological delta-R edges (< 0.4).
+    5. Applies log1p compression to pT to balance dynamic ranges.
+    """
     particles = extract_particles(event)
 
     MET, MET_x, MET_y = compute_MET(particles)
 
-    MET_node = np.array([[MET,0,0]])
+    # Physical azimuthal orientation of missing energy vector
+    phi_met = float(np.arctan2(MET_y, MET_x)) if MET > 0 else 0.0
+    MET_node = np.array([[MET, 0.0, phi_met]])
 
-    particles = np.vstack([particles, MET_node])
+    all_particles = np.vstack([particles, MET_node])
 
-    x = torch.tensor(particles, dtype=torch.float)
+    # Build spatial proximity edges based on (eta, phi)
+    edge_index = build_deltaR_edges(all_particles)
 
-    edge_index = build_deltaR_edges(particles)
+    # Feature scaling: log1p(pT) balances scale with eta and phi
+    features = all_particles.copy()
+    if log_pt:
+        features[:, 0] = np.log1p(features[:, 0])
+
+    x = torch.tensor(features, dtype=torch.float)
 
     # Attach MET vector as global target for the physics prediction head
     y = torch.tensor([MET_x, MET_y], dtype=torch.float)
