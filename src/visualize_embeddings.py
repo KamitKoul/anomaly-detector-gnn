@@ -163,7 +163,7 @@ def run_reductions(embeddings: np.ndarray):
         ``(tsne_2d, pca_2d)`` each of shape ``(N, 2)``.
     """
     print("Running t-SNE …")
-    tsne = TSNE(n_components=2, perplexity=30, random_state=42, n_iter=1000)
+    tsne = TSNE(n_components=2, perplexity=30, random_state=42, max_iter=1000)
     tsne_2d = tsne.fit_transform(embeddings)
 
     print("Running PCA …")

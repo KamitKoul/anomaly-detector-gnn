@@ -36,8 +36,8 @@ DATA_PATH = "data/events_LHCO2020_backgroundMC_Pythia.h5"
 # Number of events to process in the simulation run
 NUM_EVENTS = 1000
 
-# Anomaly score threshold – events above this MSE are flagged
-ANOMALY_THRESHOLD = 0.05
+# Anomaly score threshold – events above this MSE are flagged (calibrated to 90th percentile of background)
+ANOMALY_THRESHOLD = 0.78
 
 # ANSI color codes for terminal alerts
 COLOR_RED = "\033[91m"

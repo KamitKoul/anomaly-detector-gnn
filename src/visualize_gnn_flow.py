@@ -162,8 +162,8 @@ def pyg_to_networkx(edge_index, num_nodes):
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
 
-    src = edge_index[0].numpy()
-    dst = edge_index[1].numpy()
+    src = edge_index[0].cpu().numpy()
+    dst = edge_index[1].cpu().numpy()
     for s, d in zip(src, dst):
         if s < d:  # avoid duplicate undirected edges
             G.add_edge(int(s), int(d))
@@ -349,7 +349,7 @@ def visualize_message_passing():
     pos = nx.spring_layout(G, seed=42, k=1.5 / np.sqrt(max(num_nodes, 1)), iterations=60)
 
     # pT values for coloring (first feature column)
-    pt_values = data.x[:, 0].numpy()
+    pt_values = data.x[:, 0].cpu().numpy()
 
     # --- Render multi-panel figure ---
     fig, axes = plt.subplots(2, 2, figsize=(16, 14))

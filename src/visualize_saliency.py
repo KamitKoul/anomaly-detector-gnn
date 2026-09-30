@@ -173,10 +173,12 @@ def compute_saliency(model: NodeGNN, event) -> tuple:
     loss.backward()
 
     # Saliency = L2 norm of gradient per node (across 3 features)
-    grad = x.grad.detach().cpu().numpy()  # (N, 3)
-    saliency = np.linalg.norm(grad, axis=1)  # (N,)
+    grad = x.grad.detach().cpu().numpy()  # (N+1, 3)
+    saliency = np.linalg.norm(grad, axis=1)  # (N+1,)
 
     particles = extract_particles(event)  # (N, 3): [pT, eta, phi]
+    # Slice off the global MET node (last node) so saliency matches physical particles
+    saliency = saliency[:len(particles)]
     return particles, saliency
 
 
