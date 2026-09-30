@@ -213,20 +213,23 @@ class NodeGNN(torch.nn.Module):
     Multi-Task Graph Attention Autoencoder for Anomaly Detection.
     
     Architecture:
-      Encoder: GATConv(3→32, 4 heads) → ELU → GATConv(128→32, 1 head) → ELU
-      Decoder Head 1: Node Reconstruction (32→16→3)
-      Decoder Head 2: MET Prediction via global_mean_pool (32→16→2)
+      Encoder: GATConv(3→32, 4 heads) [conv1] → ELU → GATConv(128→32, 1 head) [conv2] → ELU
+      Decoder Head 1: Node Reconstruction (32→16→3) [decoder]
+      Decoder Head 2: MET Prediction via global_mean_pool (32→16→2) [met_head]
+
+    State-dict layer keys match models/discovery_model.pt:
+      conv1.*, conv2.*, decoder.*, met_head.*
     """
 
     def __init__(self, input_dim=3, hidden_dim=32, num_heads=4):
         super().__init__()
 
-        # Encoder: Graph Attention Layers
-        self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads, concat=True)
-        self.gat2 = GATConv(hidden_dim * num_heads, hidden_dim, heads=1, concat=False)
+        # Encoder: Graph Attention Layers (named conv1 and conv2 to match saved checkpoints)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=num_heads, concat=True)
+        self.conv2 = GATConv(hidden_dim * num_heads, hidden_dim, heads=1, concat=False)
 
-        # Decoder Head 1: Node-Level Reconstruction
-        self.recon_head = nn.Sequential(
+        # Decoder Head 1: Node-Level Reconstruction (named decoder to match saved checkpoints)
+        self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, 16),
             nn.ELU(),
             nn.Linear(16, input_dim)
@@ -239,14 +242,39 @@ class NodeGNN(torch.nn.Module):
             nn.Linear(16, 2)  # Predicts [MET_x, MET_y]
         )
 
+    # Aliases for backwards compatibility with scripts using gat1 / gat2 / recon_head
+    @property
+    def gat1(self):
+        return self.conv1
+
+    @gat1.setter
+    def gat1(self, val):
+        self.conv1 = val
+
+    @property
+    def gat2(self):
+        return self.conv2
+
+    @gat2.setter
+    def gat2(self, val):
+        self.conv2 = val
+
+    @property
+    def recon_head(self):
+        return self.decoder
+
+    @recon_head.setter
+    def recon_head(self, val):
+        self.decoder = val
+
     def forward(self, x, edge_index, batch):
 
         # Encode
-        z = F.elu(self.gat1(x, edge_index))
-        z = F.elu(self.gat2(z, edge_index))
+        z = F.elu(self.conv1(x, edge_index))
+        z = F.elu(self.conv2(z, edge_index))
 
         # Decode: Reconstruct node features
-        recon_x = self.recon_head(z)
+        recon_x = self.decoder(z)
 
         # Decode: Predict global MET
         global_z = global_mean_pool(z, batch)
