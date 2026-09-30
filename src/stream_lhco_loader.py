@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import torch
 from torch_geometric.data import Data
+import tables
 
 
 ########################################
@@ -18,25 +19,26 @@ DELTA_R_THRESHOLD = 0.4
 # STREAM DATASET
 ########################################
 
-def stream_lhco_events(chunk_size=100):
+def stream_lhco_events(data_path=DATA_PATH, chunk_size=100):
 
-    store = pd.HDFStore(DATA_PATH)
+    h5file = tables.open_file(data_path, mode='r')
 
-    key = store.keys()[0]
+    try:
+        node = h5file.get_node("/df/block0_values")
+        total_rows = node.nrows
 
-    total_rows = store.get_storer(key).nrows
+        print("Total events in dataset:", total_rows)
 
-    print("Total events in dataset:", total_rows)
+        for start in range(0, total_rows, chunk_size):
 
-    for start in range(0, total_rows, chunk_size):
+            stop = min(start + chunk_size, total_rows)
 
-        stop = min(start + chunk_size, total_rows)
+            chunk = node[start:stop]
 
-        df_chunk = store.select(key, start=start, stop=stop)
+            yield pd.DataFrame(chunk)
 
-        yield df_chunk
-
-    store.close()
+    finally:
+        h5file.close()
 
 
 ########################################

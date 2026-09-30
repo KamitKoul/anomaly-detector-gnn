@@ -1,11 +1,26 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.nn import GCNConv, GATConv, global_mean_pool
+
+
+########################################
+# DEVICE DETECTION
+########################################
+
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+DEVICE = get_device()
 
 
 ########################################
@@ -86,7 +101,7 @@ def compute_MET(particles):
 
     MET = np.sqrt(MET_x**2 + MET_y**2)
 
-    return MET
+    return MET, MET_x, MET_y
 
 
 ########################################
@@ -144,7 +159,7 @@ def event_to_graph(event):
 
     particles = extract_particles(event)
 
-    MET = compute_MET(particles)
+    MET, MET_x, MET_y = compute_MET(particles)
 
     MET_node = np.array([[MET,0,0]])
 
@@ -154,7 +169,10 @@ def event_to_graph(event):
 
     edge_index = build_deltaR_edges(particles)
 
-    data = Data(x=x, edge_index=edge_index)
+    # Attach MET vector as global target for the physics prediction head
+    y = torch.tensor([MET_x, MET_y], dtype=torch.float)
+
+    data = Data(x=x, edge_index=edge_index, y=y)
 
     return data
 
@@ -187,42 +205,96 @@ class EventGNN(torch.nn.Module):
 
 
 ########################################
+# PRODUCTION GNN MODEL (Multi-Task GAT)
+########################################
+
+class NodeGNN(torch.nn.Module):
+    """
+    Multi-Task Graph Attention Autoencoder for Anomaly Detection.
+    
+    Architecture:
+      Encoder: GATConv(3→32, 4 heads) → ELU → GATConv(128→32, 1 head) → ELU
+      Decoder Head 1: Node Reconstruction (32→16→3)
+      Decoder Head 2: MET Prediction via global_mean_pool (32→16→2)
+    """
+
+    def __init__(self, input_dim=3, hidden_dim=32, num_heads=4):
+        super().__init__()
+
+        # Encoder: Graph Attention Layers
+        self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads, concat=True)
+        self.gat2 = GATConv(hidden_dim * num_heads, hidden_dim, heads=1, concat=False)
+
+        # Decoder Head 1: Node-Level Reconstruction
+        self.recon_head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, input_dim)
+        )
+
+        # Decoder Head 2: Global MET Prediction
+        self.met_head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, 2)  # Predicts [MET_x, MET_y]
+        )
+
+    def forward(self, x, edge_index, batch):
+
+        # Encode
+        z = F.elu(self.gat1(x, edge_index))
+        z = F.elu(self.gat2(z, edge_index))
+
+        # Decode: Reconstruct node features
+        recon_x = self.recon_head(z)
+
+        # Decode: Predict global MET
+        global_z = global_mean_pool(z, batch)
+        pred_met = self.met_head(global_z)
+
+        return recon_x, pred_met
+
+
+########################################
 # RUN SAMPLE TEST
 ########################################
 
-device = torch.device("cpu")
+if __name__ == "__main__":
 
-model = EventGNN(input_dim=3).to(device)
+    device = DEVICE
+    print(f"Using device: {device}")
 
-print("Model initialized")
+    model = EventGNN(input_dim=3).to(device)
 
-
-for df_chunk in stream_lhco_events():
-
-    dataset = []
-
-    for i in range(len(df_chunk)):
-
-        event = df_chunk.iloc[i].values
-
-        graph = event_to_graph(event)
-
-        dataset.append(graph)
-
-    loader = DataLoader(dataset, batch_size=8)
-
-    for batch in loader:
-
-        batch = batch.to(device)
-
-        out = model(batch.x, batch.edge_index, batch.batch)
-
-        print("Output shape:", out.shape)
-
-    break
+    print("Model initialized")
 
 
-print("Sample pipeline run completed.")
+    for df_chunk in stream_lhco_events():
+
+        dataset = []
+
+        for i in range(len(df_chunk)):
+
+            event = df_chunk.iloc[i].values
+
+            graph = event_to_graph(event)
+
+            dataset.append(graph)
+
+        loader = DataLoader(dataset, batch_size=8)
+
+        for batch in loader:
+
+            batch = batch.to(device)
+
+            out = model(batch.x, batch.edge_index, batch.batch)
+
+            print("Output shape:", out.shape)
+
+        break
+
+
+    print("Sample pipeline run completed.")
 
 
 
