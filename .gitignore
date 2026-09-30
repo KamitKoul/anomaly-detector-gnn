@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large dataset files (GitHub has a 100MB limit per file)
+*.h5
+*.hdf5
+*.root
+
+# Virtual environments
+.venvi/
+.venv/
+venv/
+env/
+ENV/
+
+# System and logs
+.DS_Store
+*.log
+firebase-debug.log
+
+# Environment variables & secrets
+.env
+.env.local
