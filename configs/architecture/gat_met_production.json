@@ -1,0 +1,48 @@
+{
+  "experiment_name": "gat_met_production",
+  "experiment_family": "architecture",
+  "description": "Production Multi-Task Graph Attention Network with node reconstruction and global MET regression (Reference Baseline)",
+  "parent_reference": "pre-experiments-684c99e",
+  "seed": 42,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 42
+  },
+  "model": {
+    "architecture_type": "gat_autoencoder",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.1,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/architecture/gat_met_production",
+  "metadata": {
+    "is_production_baseline": true,
+    "baseline_checkpoint": "models/discovery_model.pt"
+  }
+}

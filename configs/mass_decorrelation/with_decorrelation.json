@@ -1,0 +1,47 @@
+{
+  "experiment_name": "with_decorrelation",
+  "experiment_family": "mass_decorrelation",
+  "description": "Multi-task GAT autoencoder with adversarial mass decorrelation via Gradient Reversal Layer (lambda_adv = 0.05)",
+  "parent_reference": "pre-experiments-684c99e",
+  "seed": 42,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 15,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 42
+  },
+  "model": {
+    "architecture_type": "adversarial_gat",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.1,
+    "adv_loss_weight": 0.05,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/mass_decorrelation/with_decorrelation",
+  "metadata": {
+    "baseline_checkpoint": "models/unlearning_model.pt"
+  }
+}
