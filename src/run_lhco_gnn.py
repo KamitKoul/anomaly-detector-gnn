@@ -157,28 +157,39 @@ def build_deltaR_edges(particles, threshold=DELTA_R_THRESHOLD):
 # EVENT → GRAPH
 ########################################
 
-def event_to_graph(event, log_pt=True):
+def event_to_graph(
+    event,
+    log_pt=True,
+    delta_r_threshold=DELTA_R_THRESHOLD,
+    include_met_node=True,
+    phi_met_mode="atan2",
+):
     """
     Transforms a raw collision event into a PyG Data graph object.
     
     1. Extracts visible particles [pT, eta, phi].
     2. Computes event Missing Transverse Energy (MET).
-    3. Adds a global MET node with true physical azimuthal angle phi_MET.
-    4. Computes topological delta-R edges (< 0.4).
-    5. Applies log1p compression to pT to balance dynamic ranges.
+    3. Adds a global MET node (if include_met_node=True) with azimuthal orientation
+       determined by phi_met_mode ('atan2' for physical atan2(MET_y, MET_x), or 'zero'/'none').
+    4. Computes topological delta-R edges (< delta_r_threshold).
+    5. Applies log1p compression to pT to balance dynamic ranges (if log_pt=True).
     """
     particles = extract_particles(event)
 
     MET, MET_x, MET_y = compute_MET(particles)
 
-    # Physical azimuthal orientation of missing energy vector
-    phi_met = float(np.arctan2(MET_y, MET_x)) if MET > 0 else 0.0
-    MET_node = np.array([[MET, 0.0, phi_met]])
-
-    all_particles = np.vstack([particles, MET_node])
+    if include_met_node:
+        if phi_met_mode == "atan2":
+            phi_met = float(np.arctan2(MET_y, MET_x)) if MET > 0 else 0.0
+        else:
+            phi_met = 0.0
+        MET_node = np.array([[MET, 0.0, phi_met]])
+        all_particles = np.vstack([particles, MET_node])
+    else:
+        all_particles = particles
 
     # Build spatial proximity edges based on (eta, phi)
-    edge_index = build_deltaR_edges(all_particles)
+    edge_index = build_deltaR_edges(all_particles, threshold=delta_r_threshold)
 
     # Feature scaling: log1p(pT) balances scale with eta and phi
     features = all_particles.copy()
@@ -193,6 +204,45 @@ def event_to_graph(event, log_pt=True):
     data = Data(x=x, edge_index=edge_index, y=y)
 
     return data
+
+
+def event_to_flat_features(event, input_dim=64, log_pt=True):
+    """
+    Extracts fixed-size flat tabular features for baseline MLP autoencoder.
+    Truncates to input_dim features (default 64) and applies log1p scaling to particle pT columns (0, 3, 6, ...).
+    """
+    feat = np.array(event[:input_dim], dtype=np.float32).copy()
+    if log_pt:
+        for c in range(0, input_dim, 3):
+            feat[c] = np.log1p(feat[c])
+    return torch.tensor(feat, dtype=torch.float32)
+
+
+def stream_filtered_events(data_path, is_signal=None, chunk_size=1000):
+    """
+    Streams raw event chunks from an HDF5 file with optional truth filtering.
+    If the file contains a truth column (index 2100 in 2101-column files):
+      - is_signal=True yields only truth == 1 rows
+      - is_signal=False yields only truth == 0 rows
+      - is_signal=None yields all rows
+    If the file has 2100 columns, all rows are background.
+    """
+    h5file = tables.open_file(data_path, mode='r')
+    try:
+        node = h5file.get_node("/df/block0_values")
+        total_rows = node.nrows
+        for start in range(0, total_rows, chunk_size):
+            stop = min(start + chunk_size, total_rows)
+            chunk = node[start:stop]
+            if is_signal is not None and chunk.shape[1] > 2100:
+                expected_val = 1.0 if is_signal else 0.0
+                mask = (chunk[:, 2100] == expected_val)
+                chunk = chunk[mask]
+                if len(chunk) == 0:
+                    continue
+            yield chunk
+    finally:
+        h5file.close()
 
 
 ########################################
@@ -299,6 +349,79 @@ class NodeGNN(torch.nn.Module):
         pred_met = self.met_head(global_z)
 
         return recon_x, pred_met
+
+
+########################################
+# BASELINE MLP AUTOENCODER
+########################################
+
+class BaselineMLP(nn.Module):
+    """
+    Baseline Tabular Multi-Layer Perceptron Autoencoder.
+    Layer dimensions and structure reproduce models/autoencoder_bg.pt:
+      encoder.0: Linear(64, 32)
+      encoder.1: ELU
+      encoder.2: Linear(32, 8)
+      decoder.0: Linear(8, 32)
+      decoder.1: ELU
+      decoder.2: Linear(32, 64)
+    """
+
+    def __init__(self, input_dim=64, hidden_dim=32, latent_dim=8):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, latent_dim),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, input_dim),
+        )
+
+    def forward(self, x):
+        z = self.encoder(x)
+        recon_x = self.decoder(z)
+        return recon_x
+
+
+########################################
+# MODEL FACTORY
+########################################
+
+def create_model(config):
+    """
+    Model factory returning an instantiated nn.Module matching any experiment configuration.
+    Supports:
+      - 'baseline_mlp': BaselineMLP (tabular MLP autoencoder)
+      - 'gat_autoencoder': NodeGNN (GAT autoencoder with optional MET head)
+      - 'adversarial_gat': AdversarialNodeGNN (GAT autoencoder with GRL adversary head)
+    """
+    if hasattr(config, "model"):
+        m_cfg = config.model
+        arch = m_cfg.architecture_type
+        input_dim = m_cfg.input_dim
+        hidden_dim = m_cfg.hidden_dim
+        num_heads = m_cfg.num_heads
+    elif isinstance(config, dict):
+        m_cfg = config.get("model", {})
+        arch = m_cfg.get("architecture_type", "gat_autoencoder")
+        input_dim = m_cfg.get("input_dim", 3)
+        hidden_dim = m_cfg.get("hidden_dim", 32)
+        num_heads = m_cfg.get("num_heads", 4)
+    else:
+        raise ValueError(f"Unknown config format: {type(config)}")
+
+    if arch == "baseline_mlp":
+        return BaselineMLP(input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=8)
+    elif arch == "gat_autoencoder":
+        return NodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+    elif arch == "adversarial_gat":
+        from src.adversarial_unlearning_ae import AdversarialNodeGNN
+        return AdversarialNodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+    else:
+        raise ValueError(f"Unsupported architecture_type: {arch}")
 
 
 ########################################

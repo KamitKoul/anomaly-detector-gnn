@@ -120,9 +120,136 @@ def evaluate_experiment(exp_dir: Path) -> int:
 
     print("[INFO] Checkpoint and datasets verified. Proceeding with evaluation...")
 
-    # NOTE: Execution requires torch and torch_geometric.
-    # When active in environment, this block scores events using src/ultimate_discovery_proof.py
-    # and writes metrics.json and predictions.npz into exp_dir.
+    import numpy as np
+    import torch
+    import torch.nn.functional as F
+    from src.run_lhco_gnn import (
+        create_model,
+        event_to_graph,
+        event_to_flat_features,
+        stream_filtered_events,
+        get_device,
+    )
+    from src.adversarial_unlearning_ae import AdversarialNodeGNN
+
+    device = get_device()
+    model = create_model(config).to(device)
+    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    model.eval()
+
+    eval_limit = config.dataset.eval_limit
+    arch_type = config.model.architecture_type
+    delta_r = config.graph_construction.delta_r_threshold
+    log_pt = config.graph_construction.log_pt
+    include_met = config.graph_construction.include_met_node
+    phi_mode = config.graph_construction.phi_met_mode
+
+    # Score background events
+    print(f"[INFO] Scoring {eval_limit} background events...")
+    bg_path = REPO_ROOT / config.dataset.background_path
+    bg_scores = []
+    bg_count = 0
+
+    for chunk in stream_filtered_events(str(bg_path), is_signal=False, chunk_size=1000):
+        for i in range(len(chunk)):
+            if bg_count >= eval_limit:
+                break
+            event = chunk[i]
+            if arch_type == "baseline_mlp":
+                t = event_to_flat_features(event, input_dim=config.model.input_dim, log_pt=log_pt).to(device)
+                with torch.no_grad():
+                    recon_x = model(t.unsqueeze(0))
+                    score = F.mse_loss(recon_x, t.unsqueeze(0)).item()
+            else:
+                graph = event_to_graph(
+                    event,
+                    log_pt=log_pt,
+                    delta_r_threshold=delta_r,
+                    include_met_node=include_met,
+                    phi_met_mode=phi_mode,
+                ).to(device)
+                graph.batch = torch.zeros(graph.x.size(0), dtype=torch.long, device=device)
+                with torch.no_grad():
+                    if isinstance(model, AdversarialNodeGNN):
+                        recon_x, _, _ = model(graph.x, graph.edge_index, graph.batch)
+                    else:
+                        recon_x, _ = model(graph.x, graph.edge_index, graph.batch)
+                    score = F.mse_loss(recon_x, graph.x).item()
+            bg_scores.append(score)
+            bg_count += 1
+        if bg_count >= eval_limit:
+            break
+
+    # Score signal events (truth == 1)
+    print(f"[INFO] Scoring {eval_limit} signal events...")
+    sig_path = REPO_ROOT / config.dataset.signal_path
+    sig_scores = []
+    sig_count = 0
+
+    for chunk in stream_filtered_events(str(sig_path), is_signal=True, chunk_size=1000):
+        for i in range(len(chunk)):
+            if sig_count >= eval_limit:
+                break
+            event = chunk[i]
+            if arch_type == "baseline_mlp":
+                t = event_to_flat_features(event, input_dim=config.model.input_dim, log_pt=log_pt).to(device)
+                with torch.no_grad():
+                    recon_x = model(t.unsqueeze(0))
+                    score = F.mse_loss(recon_x, t.unsqueeze(0)).item()
+            else:
+                graph = event_to_graph(
+                    event,
+                    log_pt=log_pt,
+                    delta_r_threshold=delta_r,
+                    include_met_node=include_met,
+                    phi_met_mode=phi_mode,
+                ).to(device)
+                graph.batch = torch.zeros(graph.x.size(0), dtype=torch.long, device=device)
+                with torch.no_grad():
+                    if isinstance(model, AdversarialNodeGNN):
+                        recon_x, _, _ = model(graph.x, graph.edge_index, graph.batch)
+                    else:
+                        recon_x, _ = model(graph.x, graph.edge_index, graph.batch)
+                    score = F.mse_loss(recon_x, graph.x).item()
+            sig_scores.append(score)
+            sig_count += 1
+        if sig_count >= eval_limit:
+            break
+
+    # Labels: 0 for background, 1 for signal
+    labels = [0] * len(bg_scores) + [1] * len(sig_scores)
+    all_scores = bg_scores + sig_scores
+
+    roc_metrics = compute_roc_metrics(labels, all_scores)
+    sep_metrics = compute_separation_statistics(bg_scores, sig_scores)
+
+    combined_metrics = {
+        "experiment_name": config.experiment_name,
+        "experiment_family": config.experiment_family,
+        "eval_limit_bg": len(bg_scores),
+        "eval_limit_sig": len(sig_scores),
+        **roc_metrics,
+        **sep_metrics,
+    }
+
+    # Save metrics.json
+    metrics_path = exp_dir / "metrics.json"
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(combined_metrics, f, indent=2)
+    print(f"[INFO] Metrics written: {metrics_path}")
+
+    # Save predictions.npz
+    preds_path = exp_dir / "predictions.npz"
+    np.savez_compressed(
+        preds_path,
+        bg_scores=np.array(bg_scores, dtype=np.float32),
+        sig_scores=np.array(sig_scores, dtype=np.float32),
+        labels=np.array(labels, dtype=np.int32),
+        scores=np.array(all_scores, dtype=np.float32),
+    )
+    print(f"[INFO] Predictions written: {preds_path}")
+
+    print(f"[RESULT] ROC AUC: {roc_metrics['roc_auc']:.4f} | Separation ratio: {sep_metrics['separation_ratio']:.4f}")
     return 0
 
 
