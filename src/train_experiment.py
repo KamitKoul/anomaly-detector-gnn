@@ -152,6 +152,24 @@ def load_training_dataset(
     return graph_list, "graph"
 
 
+def get_memory_diagnostics(device: torch.device) -> Dict[str, Any]:
+    """Returns memory usage statistics for the active compute device."""
+    stats: Dict[str, Any] = {"device": str(device), "device_type": device.type}
+    if device.type == "cuda":
+        idx = device.index if device.index is not None else torch.cuda.current_device()
+        stats["device_name"] = torch.cuda.get_device_name(idx)
+        stats["allocated_mb"] = round(torch.cuda.memory_allocated(idx) / (1024 ** 2), 2)
+        stats["reserved_mb"] = round(torch.cuda.memory_reserved(idx) / (1024 ** 2), 2)
+        stats["max_allocated_mb"] = round(torch.cuda.max_memory_allocated(idx) / (1024 ** 2), 2)
+    elif device.type == "mps" and hasattr(torch, "mps"):
+        try:
+            stats["allocated_mb"] = round(torch.mps.current_allocated_memory() / (1024 ** 2), 2)
+            stats["driver_mb"] = round(torch.mps.driver_allocated_memory() / (1024 ** 2), 2)
+        except Exception:
+            pass
+    return stats
+
+
 def train_single_epoch(
     model: nn.Module,
     loader: Any,
@@ -229,6 +247,11 @@ def train_single_epoch(
         adv_loss_sum += loss_adv.item()
         num_batches += 1
 
+        # Break iteration tensor references immediately to avoid autograd memory accumulation
+        del batch, recon_x, loss, loss_recon, loss_met, loss_adv
+        if device.type == "mps":
+            torch.mps.empty_cache()
+
     return {
         "loss": total_loss / max(num_batches, 1),
         "loss_recon": recon_loss_sum / max(num_batches, 1),
@@ -260,11 +283,15 @@ def run_training_experiment(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine execution device
+    # Determine execution device with CUDA -> MPS -> CPU priority
     if override_device:
         device = torch.device(override_device)
+        print(f"[DEVICE] User overridden compute device: {device}")
     else:
-        device = get_device()
+        device = get_device(verbose=True)
+
+    # Memory diagnostics at startup
+    mem_startup = get_memory_diagnostics(device)
 
     # Determine epochs and event limit
     epochs = override_epochs if override_epochs is not None else config.training.epochs
@@ -275,6 +302,11 @@ def run_training_experiment(
     print(f"Description:       {config.description}")
     print(f"Architecture:      {config.model.architecture_type}")
     print(f"Device:            {device}")
+    if device.type == "cuda":
+        print(f"GPU Name:          {mem_startup.get('device_name', 'CUDA GPU')}")
+        print(f"CUDA Memory:       Allocated={mem_startup.get('allocated_mb', 0)}MB | Reserved={mem_startup.get('reserved_mb', 0)}MB")
+    elif device.type == "mps":
+        print(f"MPS Driver Mem:    {mem_startup.get('driver_mb', 0)}MB")
     print(f"Output Directory:  {output_dir}")
     print(f"Seed:              {config.seed}")
     print(f"Epochs:            {epochs}")
@@ -335,6 +367,14 @@ def run_training_experiment(
         ep_t1 = time.time()
         metrics["epoch"] = epoch
         metrics["epoch_time_sec"] = round(ep_t1 - ep_t0, 3)
+
+        mem_epoch = get_memory_diagnostics(device)
+        mem_str = ""
+        if device.type == "cuda":
+            mem_str = f" | CUDA Mem: {mem_epoch.get('allocated_mb', 0):.1f}MB (Peak: {mem_epoch.get('max_allocated_mb', 0):.1f}MB)"
+        elif device.type == "mps":
+            mem_str = f" | MPS Driver: {mem_epoch.get('driver_mb', 0):.1f}MB"
+
         history.append(metrics)
 
         print(
@@ -344,6 +384,7 @@ def run_training_experiment(
             f"MET: {metrics['loss_met']:.5f} | "
             f"Adv: {metrics['loss_adv']:.5f} | "
             f"Time: {metrics['epoch_time_sec']}s"
+            f"{mem_str}"
         )
 
     # Output artifact persistence strictly to output_dir
@@ -358,11 +399,14 @@ def run_training_experiment(
     # Save finalized config with provenance metadata
     config.metadata.update(get_git_metadata())
     config.metadata["execution_device"] = str(device)
+    if device.type == "cuda":
+        config.metadata["gpu_name"] = torch.cuda.get_device_name(device)
     config.metadata["dry_run"] = False
     save_config(config, saved_config_path)
     print(f"[INFO] Configuration saved: {saved_config_path}")
 
-    # Save training log
+    # Save training log with device diagnostics
+    final_mem = get_memory_diagnostics(device)
     log_data = {
         "experiment_name": config.experiment_name,
         "experiment_family": config.experiment_family,
@@ -370,6 +414,7 @@ def run_training_experiment(
         "epochs_trained": epochs,
         "events_used": train_limit,
         "total_time_sec": round(time.time() - t_start, 2),
+        "device_diagnostics": final_mem,
         "history": history,
         "final_loss": history[-1] if history else {},
     }

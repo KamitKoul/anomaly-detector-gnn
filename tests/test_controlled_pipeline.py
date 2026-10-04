@@ -125,6 +125,49 @@ class TestControlledPipeline(unittest.TestCase):
             )
             self.assertEqual(ret, 0, f"Dry-run failed for {name}")
 
+    def test_device_selection_priority(self):
+        """Verify device selection priority: CUDA -> MPS -> CPU."""
+        from unittest import mock
+        from src.run_lhco_gnn import get_device
+
+        # Case 1: CUDA available -> selects CUDA
+        with mock.patch("torch.cuda.is_available", return_value=True), \
+             mock.patch("torch.cuda.get_device_name", return_value="Tesla T4"):
+            d = get_device(verbose=False)
+            self.assertEqual(d.type, "cuda")
+
+        # Case 2: CUDA unavailable, MPS available -> selects MPS
+        with mock.patch("torch.cuda.is_available", return_value=False), \
+             mock.patch("torch.backends.mps.is_available", return_value=True):
+            d = get_device(verbose=False)
+            self.assertEqual(d.type, "mps")
+
+        # Case 3: CUDA and MPS unavailable -> selects CPU
+        with mock.patch("torch.cuda.is_available", return_value=False), \
+             mock.patch("torch.backends.mps.is_available", return_value=False):
+            d = get_device(verbose=False)
+            self.assertEqual(d.type, "cpu")
+
+    def test_device_memory_diagnostics(self):
+        """Verify get_memory_diagnostics returns correct schema for CPU and CUDA."""
+        from unittest import mock
+        from src.train_experiment import get_memory_diagnostics
+
+        cpu_diag = get_memory_diagnostics(torch.device("cpu"))
+        self.assertEqual(cpu_diag["device_type"], "cpu")
+
+        with mock.patch("torch.cuda.current_device", return_value=0), \
+             mock.patch("torch.cuda.get_device_name", return_value="NVIDIA A100-SXM4-40GB"), \
+             mock.patch("torch.cuda.memory_allocated", return_value=1024 * 1024 * 50), \
+             mock.patch("torch.cuda.memory_reserved", return_value=1024 * 1024 * 100), \
+             mock.patch("torch.cuda.max_memory_allocated", return_value=1024 * 1024 * 75):
+            cuda_diag = get_memory_diagnostics(torch.device("cuda:0"))
+            self.assertEqual(cuda_diag["device_type"], "cuda")
+            self.assertEqual(cuda_diag["device_name"], "NVIDIA A100-SXM4-40GB")
+            self.assertEqual(cuda_diag["allocated_mb"], 50.0)
+            self.assertEqual(cuda_diag["reserved_mb"], 100.0)
+            self.assertEqual(cuda_diag["max_allocated_mb"], 75.0)
+
 
 if __name__ == "__main__":
     unittest.main()

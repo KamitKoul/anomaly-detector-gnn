@@ -13,12 +13,26 @@ from torch_geometric.nn import GCNConv, GATConv, global_mean_pool
 # DEVICE DETECTION
 ########################################
 
-def get_device():
+def get_device(verbose: bool = False):
+    """
+    Selects compute device with priority: CUDA -> MPS -> CPU.
+    When verbose=True, explicitly prints the selected hardware name.
+    """
     if torch.cuda.is_available():
-        return torch.device("cuda")
+        device = torch.device("cuda")
+        if verbose:
+            gpu_name = torch.cuda.get_device_name(device)
+            print(f"[DEVICE] Selected NVIDIA CUDA GPU: {gpu_name}")
+        return device
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+        device = torch.device("mps")
+        if verbose:
+            print("[DEVICE] Selected Apple Silicon Metal Performance Shaders (MPS)")
+        return device
+    device = torch.device("cpu")
+    if verbose:
+        print("[DEVICE] Fallback to CPU execution")
+    return device
 
 DEVICE = get_device()
 

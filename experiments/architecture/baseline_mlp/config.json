@@ -1,0 +1,53 @@
+{
+  "experiment_name": "baseline_mlp",
+  "experiment_family": "architecture",
+  "description": "Baseline flat tabular MLP autoencoder operating on fixed 64D event representation",
+  "parent_reference": "pre-experiments-684c99e",
+  "seed": 42,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 42
+  },
+  "model": {
+    "architecture_type": "baseline_mlp",
+    "input_dim": 64,
+    "hidden_dim": 32,
+    "num_heads": 1
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": false,
+    "phi_met_mode": "none"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.0,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/architecture/baseline_mlp",
+  "metadata": {
+    "baseline_ref": "models/autoencoder_bg.pt",
+    "commit": "b115aba94fe867fa8112c4bd5a0379e10ac1f405",
+    "branch": "main",
+    "is_dirty": true,
+    "recorded_at": "2026-10-04T01:49:15.459474+00:00",
+    "execution_device": "mps",
+    "dry_run": true
+  }
+}

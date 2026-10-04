@@ -1,0 +1,11 @@
+# Lightweight requirements for Google Colab GPU environment
+# Preserves Colab's pre-installed CUDA-enabled PyTorch
+torch-geometric>=2.5.0
+tables>=3.9.0
+pandas>=2.0.0
+numpy<2.0.0
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+tqdm>=4.66.0
+h5py>=3.10.0
+scipy>=1.12.0
