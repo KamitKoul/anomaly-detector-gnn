@@ -55,6 +55,13 @@ def compare_family(family: str, repo_root: Path) -> int:
         except Exception as e:
             print(f"  [WARN] Failed to read {mf}: {e}")
 
+    # Sort results in standard canonical order if present, or by name
+    canonical_order = ["baseline_mlp", "gat_standalone", "gat_met_production", "gat_met_decorrelation"]
+    def sort_key(item):
+        name = item.get("experiment_name", "")
+        return canonical_order.index(name) if name in canonical_order else len(canonical_order) + hash(name) % 1000
+    results.sort(key=sort_key)
+
     # Render Markdown summary table
     table_lines = [
         f"# Comparison Summary: {family.replace('_', ' ').title()}",
@@ -71,11 +78,17 @@ def compare_family(family: str, repo_root: Path) -> int:
             f"{r.get('significance_sigma', '-')}σ |"
         )
 
-    out_file = comp_family_dir / "comparison_table.md"
-    with open(out_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(table_lines) + "\n")
+    content = "\n".join(table_lines) + "\n"
+    out_table = comp_family_dir / "comparison_table.md"
+    out_summary = comp_family_dir / "summary.md"
 
-    print(f"[SUCCESS] Comparison table written to: {out_file}")
+    with open(out_table, "w", encoding="utf-8") as f:
+        f.write(content)
+    with open(out_summary, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"[SUCCESS] Comparison table written to: {out_table} and {out_summary}")
+    print("\n" + content)
     return 0
 
 
