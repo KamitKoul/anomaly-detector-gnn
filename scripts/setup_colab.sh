@@ -11,6 +11,9 @@
 
 set -eo pipefail
 
+# Ensure repository root is on PYTHONPATH for all python invocations
+export PYTHONPATH=.
+
 echo "========================================================================"
 echo "  HEP ANOMALY DETECTOR GNN — GOOGLE COLAB GPU SETUP & VERIFICATION"
 echo "========================================================================"
@@ -68,34 +71,51 @@ mkdir -p data
 BG_PATH="data/events_LHCO2020_backgroundMC_Pythia.h5"
 SIG_PATH="data/W_prime_signal.h5"
 
-if [ -f "$BG_PATH" ] && [ -f "$SIG_PATH" ]; then
-    echo "  [FOUND] Background dataset: $BG_PATH ($(du -h "$BG_PATH" | cut -f1))"
-    echo "  [FOUND] Signal dataset:     $SIG_PATH ($(du -h "$SIG_PATH" | cut -f1))"
-else
-    echo "  [STATUS] Datasets not found in data/. Checking Google Drive mount..."
-    DRIVE_LHCO="/content/drive/MyDrive/lhco_data"
-    if [ -d "$DRIVE_LHCO" ]; then
-        echo "  [INFO] Found Google Drive dataset directory: $DRIVE_LHCO"
-        if [ -f "$DRIVE_LHCO/events_LHCO2020_backgroundMC_Pythia.h5" ]; then
-            ln -sf "$DRIVE_LHCO/events_LHCO2020_backgroundMC_Pythia.h5" "$BG_PATH"
-            echo "  [LINKED] Symlinked background from Google Drive."
-        fi
-        if [ -f "$DRIVE_LHCO/W_prime_signal.h5" ]; then
-            ln -sf "$DRIVE_LHCO/W_prime_signal.h5" "$SIG_PATH"
-            echo "  [LINKED] Symlinked signal from Google Drive."
-        fi
-    else
-        echo "  [ACTION REQUIRED] Mount Google Drive and link datasets:"
-        echo "    from google.colab import drive"
-        echo "    drive.mount('/content/drive')"
-        echo "    !ln -sf /content/drive/MyDrive/path/to/events_LHCO2020_backgroundMC_Pythia.h5 data/"
-        echo "    !ln -sf /content/drive/MyDrive/path/to/W_prime_signal.h5 data/"
+# Symlink from Drive if present and not already linked
+DRIVE_LHCO="/content/drive/MyDrive/lhco_data"
+if [ -d "$DRIVE_LHCO" ]; then
+    if [ ! -e "$BG_PATH" ] && [ -f "$DRIVE_LHCO/events_LHCO2020_backgroundMC_Pythia.h5" ]; then
+        ln -sf "$DRIVE_LHCO/events_LHCO2020_backgroundMC_Pythia.h5" "$BG_PATH"
+    fi
+    if [ ! -e "$SIG_PATH" ] && [ -f "$DRIVE_LHCO/W_prime_signal.h5" ]; then
+        ln -sf "$DRIVE_LHCO/W_prime_signal.h5" "$SIG_PATH"
     fi
 fi
 
+# Verify dataset sizes by dereferencing symlinks
+python3 -c "
+import os, sys
+
+paths = [
+    ('Background (Pythia MC)', '$BG_PATH'),
+    ('Signal (W prime / R&D)', '$SIG_PATH'),
+]
+
+all_valid = True
+for name, p in paths:
+    if os.path.exists(p):
+        try:
+            size_bytes = os.path.getsize(p)
+            size_gb = size_bytes / (1024 ** 3)
+            if size_bytes < 100_000_000:
+                print(f'  [WARNING] {name}: {p} exists but is incomplete/empty ({size_bytes} bytes < 100 MB)!')
+                all_valid = False
+            else:
+                print(f'  [FOUND]   {name}: {p} ({size_gb:.2f} GB)')
+        except Exception as e:
+            print(f'  [ERROR]   {name}: {p} could not be read ({e})')
+            all_valid = False
+    else:
+        print(f'  [MISSING] {name}: {p} not found.')
+        all_valid = False
+
+if not all_valid:
+    print('  [ACTION] Please ensure datasets are mounted from Google Drive or downloaded in Cell 4.')
+"
+
 # 5. Unit Tests & Config Dry-Runs
 echo -e "\n[5/6] Executing unit tests and architecture dry-runs..."
-python3 -m unittest tests/test_controlled_pipeline.py tests/test_experiment_framework.py
+python3 -m unittest discover -s tests -p "test_*.py"
 
 echo -e "\nRunning dry-runs across all four architecture configs:"
 for cfg in baseline_mlp gat_standalone gat_met_production gat_met_decorrelation; do
