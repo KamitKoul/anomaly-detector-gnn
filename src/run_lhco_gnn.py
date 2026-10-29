@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="torch_geometric")
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -230,6 +233,18 @@ def event_to_flat_features(event, input_dim=64, log_pt=True):
         for c in range(0, input_dim, 3):
             feat[c] = np.log1p(feat[c])
     return torch.tensor(feat, dtype=torch.float32)
+
+
+def chunk_to_flat_features(chunk_array, input_dim=64, log_pt=True):
+    """
+    Vectorized extraction of flat tabular features for a 2D chunk of collision events.
+    Applies column-sliced log1p scaling to particle pT columns (0, 3, 6, ...) without Python loops.
+    """
+    chunk_np = np.asarray(chunk_array)
+    feat = np.array(chunk_np[:, :input_dim], dtype=np.float32, copy=True)
+    if log_pt:
+        feat[:, 0:input_dim:3] = np.log1p(feat[:, 0:input_dim:3])
+    return torch.from_numpy(feat)
 
 
 def stream_filtered_events(data_path, is_signal=None, chunk_size=1000):

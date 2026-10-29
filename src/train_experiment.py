@@ -190,53 +190,56 @@ def train_single_epoch(
     lambda_adv = config.objectives.adv_loss_weight
     grl_alpha = config.objectives.grl_alpha
 
+    use_amp = (device.type == "cuda")
+
     for batch in loader:
         optimizer.zero_grad()
 
-        if dataset_type == "flat":
-            # Flat tabular autoencoder
-            batch_x = batch[0].to(device)
-            recon_x = model(batch_x)
-            loss_recon = F.mse_loss(recon_x, batch_x)
-            loss = loss_recon
-            loss_met = torch.tensor(0.0)
-            loss_adv = torch.tensor(0.0)
-        else:
-            # Graph models
-            batch = batch.to(device)
-            if isinstance(model, AdversarialNodeGNN):
-                recon_x, pred_met, pred_mass = model(
-                    batch.x, batch.edge_index, batch.batch, alpha=grl_alpha
-                )
-                loss_recon = F.mse_loss(recon_x, batch.x)
+        with torch.amp.autocast(device_type="cuda", enabled=use_amp):
+            if dataset_type == "flat":
+                # Flat tabular autoencoder
+                batch_x = batch[0].to(device, non_blocking=True)
+                recon_x = model(batch_x)
+                loss_recon = F.mse_loss(recon_x, batch_x)
                 loss = loss_recon
-
-                if lambda_met > 0.0:
-                    loss_met = F.mse_loss(pred_met, batch.y.view(-1, 2))
-                    loss = loss + lambda_met * loss_met
-                else:
-                    loss_met = torch.tensor(0.0)
-
-                if lambda_adv > 0.0 and hasattr(batch, "mass"):
-                    loss_adv = F.mse_loss(pred_mass.view(-1, 1), batch.mass.view(-1, 1))
-                    loss = loss + lambda_adv * loss_adv
-                else:
-                    loss_adv = torch.tensor(0.0)
-
-            elif isinstance(model, NodeGNN):
-                recon_x, pred_met = model(batch.x, batch.edge_index, batch.batch)
-                loss_recon = F.mse_loss(recon_x, batch.x)
-                loss = loss_recon
-
-                if lambda_met > 0.0:
-                    loss_met = F.mse_loss(pred_met, batch.y.view(-1, 2))
-                    loss = loss + lambda_met * loss_met
-                else:
-                    loss_met = torch.tensor(0.0)
-
-                loss_adv = torch.tensor(0.0)
+                loss_met = torch.tensor(0.0, device=device)
+                loss_adv = torch.tensor(0.0, device=device)
             else:
-                raise ValueError(f"Unknown model class: {type(model)}")
+                # Graph models
+                batch = batch.to(device, non_blocking=True)
+                if isinstance(model, AdversarialNodeGNN):
+                    recon_x, pred_met, pred_mass = model(
+                        batch.x, batch.edge_index, batch.batch, alpha=grl_alpha
+                    )
+                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss = loss_recon
+
+                    if lambda_met > 0.0:
+                        loss_met = F.mse_loss(pred_met, batch.y.view(-1, 2))
+                        loss = loss + lambda_met * loss_met
+                    else:
+                        loss_met = torch.tensor(0.0, device=device)
+
+                    if lambda_adv > 0.0 and hasattr(batch, "mass"):
+                        loss_adv = F.mse_loss(pred_mass.view(-1, 1), batch.mass.view(-1, 1))
+                        loss = loss + lambda_adv * loss_adv
+                    else:
+                        loss_adv = torch.tensor(0.0, device=device)
+
+                elif isinstance(model, NodeGNN):
+                    recon_x, pred_met = model(batch.x, batch.edge_index, batch.batch)
+                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss = loss_recon
+
+                    if lambda_met > 0.0:
+                        loss_met = F.mse_loss(pred_met, batch.y.view(-1, 2))
+                        loss = loss + lambda_met * loss_met
+                    else:
+                        loss_met = torch.tensor(0.0, device=device)
+
+                    loss_adv = torch.tensor(0.0, device=device)
+                else:
+                    raise ValueError(f"Unknown model class: {type(model)}")
 
         loss.backward()
         optimizer.step()
@@ -289,6 +292,9 @@ def run_training_experiment(
         print(f"[DEVICE] User overridden compute device: {device}")
     else:
         device = get_device(verbose=True)
+
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
 
     # Memory diagnostics at startup
     mem_startup = get_memory_diagnostics(device)
@@ -347,12 +353,13 @@ def run_training_experiment(
     dataset, dataset_type = load_training_dataset(config, limit=train_limit, repo_root=REPO_ROOT)
     print(f"[INFO] Loaded {len(dataset)} items (type: {dataset_type}).")
 
-    # Create data loader
+    # Create data loader with pinned host memory for direct GPU DMA transfers
     batch_size = config.training.batch_size
+    pin_mem = (device.type == "cuda")
     if dataset_type == "flat":
-        loader = TorchDataLoader(dataset, batch_size=batch_size, shuffle=True)
+        loader = TorchDataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_mem)
     else:
-        loader = PyGDataLoader(dataset, batch_size=batch_size, shuffle=True)
+        loader = PyGDataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_mem)
 
     # Initialize optimizer
     lr = config.training.learning_rate

@@ -127,6 +127,7 @@ def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None
         create_model,
         event_to_graph,
         event_to_flat_features,
+        chunk_to_flat_features,
         stream_filtered_events,
         get_device,
     )
@@ -145,93 +146,136 @@ def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None
         else:
             print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
     arch_type = config.model.architecture_type
-    delta_r = config.graph_construction.delta_r_threshold
-    log_pt = config.graph_construction.log_pt
-    include_met = config.graph_construction.include_met_node
-    phi_mode = config.graph_construction.phi_met_mode
+
+    def score_event_population(
+        file_path: Path,
+        is_signal: bool,
+        train_skip: int = 0,
+        batch_size: int = 128,
+    ) -> List[float]:
+        """
+        Saturates GPU utilization by batching event inference and executing per-graph loss reduction on device.
+        - For baseline_mlp: processes full HDF5 chunks in parallel via vectorized 2D matrix multiplications.
+        - For GNN models: batches 128 graphs into disjoint block-diagonal tensors, computing MSE on GPU with scatter_add_.
+        """
+        scores: List[float] = []
+        skipped = 0
+        count = 0
+        pop_name = "signal" if is_signal else "background"
+
+        if arch_type == "baseline_mlp":
+            chunk_size = 2000
+            for chunk in stream_filtered_events(str(file_path), is_signal=is_signal, chunk_size=chunk_size):
+                chunk_len = len(chunk)
+                if chunk_len == 0:
+                    continue
+
+                start_idx = 0
+                if skipped < train_skip:
+                    needed = train_skip - skipped
+                    if chunk_len <= needed:
+                        skipped += chunk_len
+                        continue
+                    else:
+                        start_idx = needed
+                        skipped = train_skip
+
+                available = chunk_len - start_idx
+                if eval_limit is not None:
+                    remaining = eval_limit - count
+                    if remaining <= 0:
+                        break
+                    take_len = min(available, remaining)
+                else:
+                    take_len = available
+
+                chunk_slice = chunk[start_idx : start_idx + take_len]
+                batch_x = chunk_to_flat_features(
+                    chunk_slice,
+                    input_dim=config.model.input_dim,
+                    log_pt=config.graph_construction.log_pt,
+                ).to(device, non_blocking=True)
+
+                with torch.no_grad():
+                    recon_x = model(batch_x)
+                    batch_scores = F.mse_loss(recon_x, batch_x, reduction="none").mean(dim=1)
+
+                scores.extend(batch_scores.cpu().tolist())
+                count += take_len
+                if count % 50000 < take_len or (count >= 10000 and count % 10000 == 0):
+                    print(f"  [PROGRESS] Evaluated {count} {pop_name} events on GPU...")
+                if eval_limit is not None and count >= eval_limit:
+                    break
+        else:
+            delta_r = config.graph_construction.delta_r_threshold
+            log_pt = config.graph_construction.log_pt
+            include_met = config.graph_construction.include_met_node
+            phi_mode = config.graph_construction.phi_met_mode
+            graph_buffer: List[Any] = []
+
+            def flush_graph_buffer():
+                nonlocal graph_buffer, scores
+                if not graph_buffer:
+                    return
+                from torch_geometric.data import Batch
+                batched_graph = Batch.from_data_list(graph_buffer).to(device, non_blocking=True)
+                with torch.no_grad():
+                    if isinstance(model, AdversarialNodeGNN):
+                        recon_x, _, _ = model(batched_graph.x, batched_graph.edge_index, batched_graph.batch)
+                    else:
+                        recon_x, _ = model(batched_graph.x, batched_graph.edge_index, batched_graph.batch)
+
+                    node_err = (recon_x - batched_graph.x).pow(2).mean(dim=1)
+                    num_g = batched_graph.num_graphs
+                    graph_err_sums = torch.zeros(num_g, device=device).scatter_add_(0, batched_graph.batch, node_err)
+                    graph_node_counts = torch.zeros(num_g, device=device).scatter_add_(0, batched_graph.batch, torch.ones_like(node_err))
+                    batch_scores = (graph_err_sums / graph_node_counts.clamp(min=1.0)).cpu().tolist()
+
+                scores.extend(batch_scores)
+                graph_buffer.clear()
+
+            for chunk in stream_filtered_events(str(file_path), is_signal=is_signal, chunk_size=1000):
+                for i in range(len(chunk)):
+                    if skipped < train_skip:
+                        skipped += 1
+                        continue
+                    if eval_limit is not None and count >= eval_limit:
+                        break
+
+                    event = chunk[i]
+                    graph = event_to_graph(
+                        event,
+                        log_pt=log_pt,
+                        delta_r_threshold=delta_r,
+                        include_met_node=include_met,
+                        phi_met_mode=phi_mode,
+                    )
+                    graph_buffer.append(graph)
+                    count += 1
+
+                    if len(graph_buffer) >= batch_size:
+                        flush_graph_buffer()
+                        if count % 50000 < batch_size or (count >= 10000 and count % 10000 == 0):
+                            print(f"  [PROGRESS] Evaluated {count} {pop_name} events on GPU...")
+                if eval_limit is not None and count >= eval_limit:
+                    break
+
+            flush_graph_buffer()
+
+        return scores
 
     # Score background events (skip train_limit to avoid evaluation leakage)
     train_skip = getattr(config.dataset, "train_limit", 0)
     bg_limit_desc = f"{eval_limit} unseen" if eval_limit else f"ALL available (skipping {train_skip} training events)"
-    print(f"[INFO] Scoring {bg_limit_desc} background events...")
+    print(f"[INFO] Scoring {bg_limit_desc} background events (GPU accelerated)...")
     bg_path = REPO_ROOT / config.dataset.background_path
-    bg_scores = []
-    bg_count = 0
-    bg_skipped = 0
-
-    for chunk in stream_filtered_events(str(bg_path), is_signal=False, chunk_size=1000):
-        for i in range(len(chunk)):
-            if bg_skipped < train_skip:
-                bg_skipped += 1
-                continue
-            if eval_limit is not None and bg_count >= eval_limit:
-                break
-            event = chunk[i]
-            if arch_type == "baseline_mlp":
-                t = event_to_flat_features(event, input_dim=config.model.input_dim, log_pt=log_pt).to(device)
-                with torch.no_grad():
-                    recon_x = model(t.unsqueeze(0))
-                    score = F.mse_loss(recon_x, t.unsqueeze(0)).item()
-            else:
-                graph = event_to_graph(
-                    event,
-                    log_pt=log_pt,
-                    delta_r_threshold=delta_r,
-                    include_met_node=include_met,
-                    phi_met_mode=phi_mode,
-                ).to(device)
-                graph.batch = torch.zeros(graph.x.size(0), dtype=torch.long, device=device)
-                with torch.no_grad():
-                    if isinstance(model, AdversarialNodeGNN):
-                        recon_x, _, _ = model(graph.x, graph.edge_index, graph.batch)
-                    else:
-                        recon_x, _ = model(graph.x, graph.edge_index, graph.batch)
-                    score = F.mse_loss(recon_x, graph.x).item()
-            bg_scores.append(score)
-            bg_count += 1
-            if bg_count % 10000 == 0:
-                print(f"  [PROGRESS] Evaluated {bg_count} background events...")
-        if eval_limit is not None and bg_count >= eval_limit:
-            break
+    bg_scores = score_event_population(bg_path, is_signal=False, train_skip=train_skip, batch_size=128)
 
     # Score signal events (truth == 1)
     sig_limit_desc = f"{eval_limit}" if eval_limit else "ALL available genuine"
-    print(f"[INFO] Scoring {sig_limit_desc} signal events...")
+    print(f"[INFO] Scoring {sig_limit_desc} signal events (GPU accelerated)...")
     sig_path = REPO_ROOT / config.dataset.signal_path
-    sig_scores = []
-    sig_count = 0
-
-    for chunk in stream_filtered_events(str(sig_path), is_signal=True, chunk_size=1000):
-        for i in range(len(chunk)):
-            if eval_limit is not None and sig_count >= eval_limit:
-                break
-            event = chunk[i]
-            if arch_type == "baseline_mlp":
-                t = event_to_flat_features(event, input_dim=config.model.input_dim, log_pt=log_pt).to(device)
-                with torch.no_grad():
-                    recon_x = model(t.unsqueeze(0))
-                    score = F.mse_loss(recon_x, t.unsqueeze(0)).item()
-            else:
-                graph = event_to_graph(
-                    event,
-                    log_pt=log_pt,
-                    delta_r_threshold=delta_r,
-                    include_met_node=include_met,
-                    phi_met_mode=phi_mode,
-                ).to(device)
-                graph.batch = torch.zeros(graph.x.size(0), dtype=torch.long, device=device)
-                with torch.no_grad():
-                    if isinstance(model, AdversarialNodeGNN):
-                        recon_x, _, _ = model(graph.x, graph.edge_index, graph.batch)
-                    else:
-                        recon_x, _ = model(graph.x, graph.edge_index, graph.batch)
-                    score = F.mse_loss(recon_x, graph.x).item()
-            sig_scores.append(score)
-            sig_count += 1
-            if sig_count % 10000 == 0:
-                print(f"  [PROGRESS] Evaluated {sig_count} signal events...")
-        if eval_limit is not None and sig_count >= eval_limit:
-            break
+    sig_scores = score_event_population(sig_path, is_signal=True, train_skip=0, batch_size=128)
 
     # Labels: 0 for background, 1 for signal
     labels = [0] * len(bg_scores) + [1] * len(sig_scores)
