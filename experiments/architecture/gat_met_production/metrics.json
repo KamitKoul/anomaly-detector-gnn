@@ -1,0 +1,10 @@
+{
+  "experiment_name": "gat_met_production",
+  "experiment_family": "architecture",
+  "eval_limit_bg": 995000,
+  "eval_limit_sig": 100000,
+  "roc_auc": 0.6584,
+  "background_rejection_at_50_eff": 3.25,
+  "separation_ratio": 1.1561,
+  "significance_sigma": 0.36
+}
