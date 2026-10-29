@@ -20,10 +20,14 @@ training. The exact same evaluation population is reused for every model.
 No training is performed.
 """
 
+import sys
 import argparse
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 
 import numpy as np
 import torch
@@ -38,9 +42,6 @@ from src.run_lhco_gnn import (
     event_to_graph,
     stream_filtered_events,
 )
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 EXPERIMENTS = [
     "baseline_mlp",
@@ -85,13 +86,16 @@ def load_events(
 
             events.append(np.asarray(event))
 
-            if len(events) >= limit:
+            if limit is not None and limit > 0 and len(events) >= limit:
                 return events
 
-    raise RuntimeError(
-        f"Requested {limit} events after skipping {skip}, but only found "
-        f"{len(events)} available events in {data_path}"
-    )
+    if limit is not None and limit > 0 and len(events) < limit:
+        raise RuntimeError(
+            f"Requested {limit} events after skipping {skip}, but only found "
+            f"{len(events)} available events in {data_path}"
+        )
+
+    return events
 
 
 def load_evaluation_population(
@@ -110,18 +114,24 @@ def load_evaluation_population(
     bg_path = REPO_ROOT / config.dataset.background_path
     signal_path = REPO_ROOT / config.dataset.signal_path
 
-    eval_limit = eval_limit_override if eval_limit_override is not None else config.dataset.eval_limit
+    if eval_limit_override is not None:
+        if eval_limit_override <= 0:
+            eval_limit = None
+            print("[OVERRIDE] Full dataset evaluation population enabled (streaming all events to EOF).")
+        else:
+            eval_limit = eval_limit_override
+            print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
+    else:
+        eval_limit = config.dataset.eval_limit
     train_limit = config.dataset.train_limit
 
     print("\n" + "=" * 70)
     print("LOADING COMMON HELD-OUT EVALUATION POPULATION")
-    if eval_limit_override is not None:
-        print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
     print(f"Background file: {bg_path}")
     print(f"Signal file:     {signal_path}")
     print(f"Training BG population skipped: {train_limit}")
-    print(f"Evaluation BG events:            {eval_limit}")
-    print(f"Evaluation signal events:        {eval_limit}")
+    print(f"Evaluation BG events:            {'ALL' if eval_limit is None else eval_limit}")
+    print(f"Evaluation signal events:        {'ALL' if eval_limit is None else eval_limit}")
 
     background = load_events(
         bg_path,
@@ -392,6 +402,11 @@ def main() -> None:
         default=None,
         help="Override the evaluation population event count (default: from reference config)",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Evaluate on ALL available events (all ~1M background and all 100k signal events)",
+    )
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -419,9 +434,10 @@ def main() -> None:
 
     reference_config = load_config(reference_config_path)
 
+    override = -1 if args.all else args.eval_limit
     background, signal, population_metadata = load_evaluation_population(
         reference_config,
-        eval_limit_override=args.eval_limit,
+        eval_limit_override=override,
     )
 
     all_results = []

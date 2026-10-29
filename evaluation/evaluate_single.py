@@ -139,22 +139,32 @@ def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None
 
     eval_limit = eval_limit_override if eval_limit_override is not None else config.dataset.eval_limit
     if eval_limit_override is not None:
-        print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
+        if eval_limit_override <= 0:
+            eval_limit = None
+            print("[OVERRIDE] Full dataset evaluation enabled: streaming ALL events to EOF.")
+        else:
+            print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
     arch_type = config.model.architecture_type
     delta_r = config.graph_construction.delta_r_threshold
     log_pt = config.graph_construction.log_pt
     include_met = config.graph_construction.include_met_node
     phi_mode = config.graph_construction.phi_met_mode
 
-    # Score background events
-    print(f"[INFO] Scoring {eval_limit} background events...")
+    # Score background events (skip train_limit to avoid evaluation leakage)
+    train_skip = getattr(config.dataset, "train_limit", 0)
+    bg_limit_desc = f"{eval_limit} unseen" if eval_limit else f"ALL available (skipping {train_skip} training events)"
+    print(f"[INFO] Scoring {bg_limit_desc} background events...")
     bg_path = REPO_ROOT / config.dataset.background_path
     bg_scores = []
     bg_count = 0
+    bg_skipped = 0
 
     for chunk in stream_filtered_events(str(bg_path), is_signal=False, chunk_size=1000):
         for i in range(len(chunk)):
-            if bg_count >= eval_limit:
+            if bg_skipped < train_skip:
+                bg_skipped += 1
+                continue
+            if eval_limit is not None and bg_count >= eval_limit:
                 break
             event = chunk[i]
             if arch_type == "baseline_mlp":
@@ -179,18 +189,21 @@ def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None
                     score = F.mse_loss(recon_x, graph.x).item()
             bg_scores.append(score)
             bg_count += 1
-        if bg_count >= eval_limit:
+            if bg_count % 10000 == 0:
+                print(f"  [PROGRESS] Evaluated {bg_count} background events...")
+        if eval_limit is not None and bg_count >= eval_limit:
             break
 
     # Score signal events (truth == 1)
-    print(f"[INFO] Scoring {eval_limit} signal events...")
+    sig_limit_desc = f"{eval_limit}" if eval_limit else "ALL available genuine"
+    print(f"[INFO] Scoring {sig_limit_desc} signal events...")
     sig_path = REPO_ROOT / config.dataset.signal_path
     sig_scores = []
     sig_count = 0
 
     for chunk in stream_filtered_events(str(sig_path), is_signal=True, chunk_size=1000):
         for i in range(len(chunk)):
-            if sig_count >= eval_limit:
+            if eval_limit is not None and sig_count >= eval_limit:
                 break
             event = chunk[i]
             if arch_type == "baseline_mlp":
@@ -215,7 +228,9 @@ def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None
                     score = F.mse_loss(recon_x, graph.x).item()
             sig_scores.append(score)
             sig_count += 1
-        if sig_count >= eval_limit:
+            if sig_count % 10000 == 0:
+                print(f"  [PROGRESS] Evaluated {sig_count} signal events...")
+        if eval_limit is not None and sig_count >= eval_limit:
             break
 
     # Labels: 0 for background, 1 for signal
@@ -269,6 +284,11 @@ def main():
         default=None,
         help="Override the evaluation population event count (default: config.dataset.eval_limit)",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Evaluate on ALL available events (all ~1M background + all 100k signal events)",
+    )
     args = parser.parse_args()
 
     exp_dir = Path(args.experiment)
@@ -276,7 +296,8 @@ def main():
         print(f"[ERROR] Directory does not exist: {exp_dir}")
         sys.exit(1)
 
-    sys.exit(evaluate_experiment(exp_dir, eval_limit_override=args.eval_limit))
+    override = -1 if args.all else args.eval_limit
+    sys.exit(evaluate_experiment(exp_dir, eval_limit_override=override))
 
 
 if __name__ == "__main__":
