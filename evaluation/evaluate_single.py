@@ -91,7 +91,7 @@ def compute_separation_statistics(bg_scores, sig_scores) -> Dict[str, float]:
 # Currently pending agreed binning and edge-smoothing convention.
 
 
-def evaluate_experiment(exp_dir: Path) -> int:
+def evaluate_experiment(exp_dir: Path, eval_limit_override: Optional[int] = None) -> int:
     """Executes single experiment evaluation or reports missing prerequisites."""
     config_path = exp_dir / "config.json"
     checkpoint_path = exp_dir / "checkpoint.pt"
@@ -137,7 +137,9 @@ def evaluate_experiment(exp_dir: Path) -> int:
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model.eval()
 
-    eval_limit = config.dataset.eval_limit
+    eval_limit = eval_limit_override if eval_limit_override is not None else config.dataset.eval_limit
+    if eval_limit_override is not None:
+        print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
     arch_type = config.model.architecture_type
     delta_r = config.graph_construction.delta_r_threshold
     log_pt = config.graph_construction.log_pt
@@ -261,6 +263,12 @@ def main():
         required=True,
         help="Path to experiment directory (e.g., experiments/architecture/gat_met_production)",
     )
+    parser.add_argument(
+        "--eval-limit",
+        type=int,
+        default=None,
+        help="Override the evaluation population event count (default: config.dataset.eval_limit)",
+    )
     args = parser.parse_args()
 
     exp_dir = Path(args.experiment)
@@ -268,7 +276,7 @@ def main():
         print(f"[ERROR] Directory does not exist: {exp_dir}")
         sys.exit(1)
 
-    sys.exit(evaluate_experiment(exp_dir))
+    sys.exit(evaluate_experiment(exp_dir, eval_limit_override=args.eval_limit))
 
 
 if __name__ == "__main__":

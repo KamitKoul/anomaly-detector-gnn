@@ -96,6 +96,7 @@ def load_events(
 
 def load_evaluation_population(
     config: ExperimentConfig,
+    eval_limit_override: int = None,
 ) -> Tuple[List[np.ndarray], List[np.ndarray], Dict]:
     """
     Load the common held-out evaluation population once.
@@ -109,11 +110,13 @@ def load_evaluation_population(
     bg_path = REPO_ROOT / config.dataset.background_path
     signal_path = REPO_ROOT / config.dataset.signal_path
 
-    eval_limit = config.dataset.eval_limit
+    eval_limit = eval_limit_override if eval_limit_override is not None else config.dataset.eval_limit
     train_limit = config.dataset.train_limit
 
     print("\n" + "=" * 70)
     print("LOADING COMMON HELD-OUT EVALUATION POPULATION")
+    if eval_limit_override is not None:
+        print(f"[OVERRIDE] Using custom eval_limit: {eval_limit} events (config default: {config.dataset.eval_limit})")
     print(f"Background file: {bg_path}")
     print(f"Signal file:     {signal_path}")
     print(f"Training BG population skipped: {train_limit}")
@@ -383,6 +386,12 @@ def main() -> None:
         default=None,
         choices=EXPERIMENTS,
     )
+    parser.add_argument(
+        "--eval-limit",
+        type=int,
+        default=None,
+        help="Override the evaluation population event count (default: from reference config)",
+    )
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -411,7 +420,8 @@ def main() -> None:
     reference_config = load_config(reference_config_path)
 
     background, signal, population_metadata = load_evaluation_population(
-        reference_config
+        reference_config,
+        eval_limit_override=args.eval_limit,
     )
 
     all_results = []
