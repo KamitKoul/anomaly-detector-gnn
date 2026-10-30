@@ -33,6 +33,9 @@ client_secrets*.json
 .ipynb_checkpoints/
 
 # Generated experiment binaries (checkpoints & large prediction arrays)
-experiments/**/*.pt
-experiments/**/*.npz
+*.pt
+*.npz
+*.tar.gz
+*.zip
+archive/
 experiments/test_dry_runs/
