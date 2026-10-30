@@ -1,0 +1,28 @@
+{
+  "experiment_name": "gat_standalone",
+  "experiment_family": "architecture",
+  "eval_count": 20000,
+  "cuts": {
+    "top_10pct": {
+      "threshold": 0.517135,
+      "jsd_raw": 0.003296,
+      "inv_jsd_raw": 303.37,
+      "jsd_rsd": 0.004585,
+      "inv_jsd_rsd": 218.13
+    },
+    "top_5pct": {
+      "threshold": 0.633172,
+      "jsd_raw": 0.00417,
+      "inv_jsd_raw": 239.81,
+      "jsd_rsd": 0.005356,
+      "inv_jsd_rsd": 186.72
+    },
+    "top_1pct": {
+      "threshold": 0.975139,
+      "jsd_raw": 0.034493,
+      "inv_jsd_raw": 28.99,
+      "jsd_rsd": 0.035623,
+      "inv_jsd_rsd": 28.07
+    }
+  }
+}

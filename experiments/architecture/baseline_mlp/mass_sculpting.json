@@ -1,0 +1,28 @@
+{
+  "experiment_name": "baseline_mlp",
+  "experiment_family": "architecture",
+  "eval_count": 20000,
+  "cuts": {
+    "top_10pct": {
+      "threshold": 1.206251,
+      "jsd_raw": 0.002415,
+      "inv_jsd_raw": 414.03,
+      "jsd_rsd": 0.002264,
+      "inv_jsd_rsd": 441.79
+    },
+    "top_5pct": {
+      "threshold": 1.468376,
+      "jsd_raw": 0.003959,
+      "inv_jsd_raw": 252.56,
+      "jsd_rsd": 0.005249,
+      "inv_jsd_rsd": 190.51
+    },
+    "top_1pct": {
+      "threshold": 2.025395,
+      "jsd_raw": 0.019334,
+      "inv_jsd_raw": 51.72,
+      "jsd_rsd": 0.033184,
+      "inv_jsd_rsd": 30.14
+    }
+  }
+}

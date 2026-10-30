@@ -1,0 +1,28 @@
+{
+  "experiment_name": "gat_met_production",
+  "experiment_family": "architecture",
+  "eval_count": 20000,
+  "cuts": {
+    "top_10pct": {
+      "threshold": 0.593039,
+      "jsd_raw": 0.002341,
+      "inv_jsd_raw": 427.19,
+      "jsd_rsd": 0.00236,
+      "inv_jsd_rsd": 423.74
+    },
+    "top_5pct": {
+      "threshold": 0.743141,
+      "jsd_raw": 0.005113,
+      "inv_jsd_raw": 195.58,
+      "jsd_rsd": 0.005642,
+      "inv_jsd_rsd": 177.23
+    },
+    "top_1pct": {
+      "threshold": 1.238651,
+      "jsd_raw": 0.039537,
+      "inv_jsd_raw": 25.29,
+      "jsd_rsd": 0.037278,
+      "inv_jsd_rsd": 26.83
+    }
+  }
+}

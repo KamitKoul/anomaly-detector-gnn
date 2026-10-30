@@ -1,6 +1,6 @@
-# Background Mass Sculpting & Sample Size Convergence Analysis
+# Background Mass Sculpting: 20,000-Event Benchmark & Sample Convergence
 
-## 1. 20,000-Event Evaluation Results (Final Plateau Benchmark)
+## 1. 20,000-Event Evaluation Summary (Asymptotic Plateau)
 
 | Experiment | 1/JSD (Raw, Top 10%) | 1/JSD (RSD, Top 10%) | 1/JSD (Raw, Top 5%) | 1/JSD (RSD, Top 5%) |
 | :--- | :---: | :---: | :---: | :---: |
@@ -34,7 +34,7 @@
 
 ---
 
-## 4. Scientific Conclusion & Asymptotic Elbow Verification
+## 4. Scientific Conclusions
 
 1. **The Elbow Inflection:**  
    The physical divergence ($\text{JSD}$) drops precipitously between $1\text{k}$ and $10\text{k}$ ($\Delta \approx 0.046$) as the Poisson tail counting noise collapses. Between $10\text{k}$ and $20\text{k}$, the curve enters an asymptotic horizontal floor where the difference in divergence is minuscule ($\Delta\text{JSD} \approx 0.0012$).

@@ -1,0 +1,28 @@
+{
+  "experiment_name": "gat_met_decorrelation",
+  "experiment_family": "architecture",
+  "eval_count": 20000,
+  "cuts": {
+    "top_10pct": {
+      "threshold": 0.59549,
+      "jsd_raw": 0.00285,
+      "inv_jsd_raw": 350.93,
+      "jsd_rsd": 0.00388,
+      "inv_jsd_rsd": 257.76
+    },
+    "top_5pct": {
+      "threshold": 0.735675,
+      "jsd_raw": 0.004786,
+      "inv_jsd_raw": 208.95,
+      "jsd_rsd": 0.006232,
+      "inv_jsd_rsd": 160.46
+    },
+    "top_1pct": {
+      "threshold": 1.134016,
+      "jsd_raw": 0.037202,
+      "inv_jsd_raw": 26.88,
+      "jsd_rsd": 0.037788,
+      "inv_jsd_rsd": 26.46
+    }
+  }
+}
