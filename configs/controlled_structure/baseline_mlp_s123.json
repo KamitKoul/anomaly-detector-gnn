@@ -1,0 +1,47 @@
+{
+  "experiment_name": "baseline_mlp_s123",
+  "experiment_family": "controlled_structure",
+  "description": "Model A: Baseline flat tabular MLP autoencoder on 64 leading particle features (seed=123)",
+  "parent_reference": "controlled_structure_phase2",
+  "seed": 123,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 10000
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 123
+  },
+  "model": {
+    "architecture_type": "baseline_mlp",
+    "input_dim": 64,
+    "hidden_dim": 32
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": false,
+    "phi_met_mode": "none"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.0,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/controlled_structure/baseline_mlp_s123",
+  "metadata": {
+    "model_class": "baseline_mlp",
+    "random_seed": 123
+  }
+}

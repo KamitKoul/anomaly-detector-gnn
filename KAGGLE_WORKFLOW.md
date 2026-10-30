@@ -173,6 +173,30 @@ print("\n--- Comparative Results Summary ---")
 !python evaluation/investigate_deep_physics.py --family architecture --limit 10000 --signal-limit 5000
 ```
 
+#### Cell 8.3: Controlled Graph Structure Multi-Seed Training (Phase 2)
+```python
+import os, glob
+
+# Train all 12 controlled architecture models across seeds 42, 123, 999
+configs = sorted(glob.glob("configs/controlled_structure/*.json"))
+print(f"[INFO] Found {len(configs)} controlled structure experiment configs to train.")
+
+for cfg in configs:
+    exp_name = os.path.basename(cfg).replace(".json", "")
+    ckpt_path = f"experiments/controlled_structure/{exp_name}/checkpoint.pt"
+    if os.path.exists(ckpt_path):
+        print(f"[INFO] Skipping {exp_name} (checkpoint already exists).")
+        continue
+    print(f"\n{'='*70}\n[TRAINING] {exp_name}\n{'='*70}")
+    !python src/train_experiment.py --config "{cfg}"
+```
+
+#### Cell 8.4: Controlled Architecture & Anomaly-Score Ablation Evaluation (Phase 3)
+```python
+!python evaluation/evaluate_controlled_ablation.py --family controlled_structure --limit 10000 --signal-limit 5000
+!cat comparisons/controlled_structure/controlled_ablation_table.md
+```
+
 #### Cell 9: Package Results for One-Click Download
 ```python
 !zip -q -r /kaggle/working/phase3_results.zip experiments/ comparisons/

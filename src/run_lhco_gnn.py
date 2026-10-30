@@ -145,7 +145,11 @@ def build_deltaR_edges(particles, threshold=DELTA_R_THRESHOLD):
     Vectorized computation of delta R graph edges:
       dr = sqrt((d_eta)^2 + (d_phi)^2) with periodic phi wrap-around.
     Excludes self-loops and returns a [2, num_edges] long tensor.
+    If threshold <= 0.0, immediately returns an empty edge index [2, 0].
     """
+    if threshold <= 0.0:
+        return torch.zeros((2, 0), dtype=torch.long)
+
     num_nodes = len(particles)
     if num_nodes <= 1:
         return torch.tensor([[0], [0]], dtype=torch.long)
@@ -421,6 +425,112 @@ class BaselineMLP(nn.Module):
 
 
 ########################################
+# CONTROLLED ARCHITECTURE 3: NODE-WISE AUTOENCODER (NO MESSAGE PASSING)
+########################################
+
+class NodeWiseAE(nn.Module):
+    """
+    Node-Wise Feedforward Autoencoder with Zero Relational Message Passing.
+    Processes each particle x_i in the collision event independently (self-loops only).
+    Architecture matches parameter budget of NodeGNN (~5.8k parameters):
+      Encoder: Linear(3 -> 128) -> ELU -> Linear(128 -> 32) -> ELU
+      Decoder: Linear(32 -> 16) -> ELU -> Linear(16 -> 3)
+      Optional MET Head: Linear(32 -> 16) -> ELU -> Linear(16 -> 2) from global_mean_pool(z)
+    """
+
+    def __init__(self, input_dim=3, hidden_dim=32, wide_dim=128):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, wide_dim),
+            nn.ELU(),
+            nn.Linear(wide_dim, hidden_dim),
+            nn.ELU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, input_dim),
+        )
+        self.met_head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, 2),
+        )
+
+    def encode(self, x, edge_index=None, batch=None):
+        """Encodes particle nodes independently, returning node-level z and pooled global_z."""
+        z = self.encoder(x)
+        if batch is not None:
+            global_z = global_mean_pool(z, batch)
+        else:
+            global_z = z.mean(dim=0, keepdim=True)
+        return z, global_z
+
+    def forward(self, x, edge_index=None, batch=None):
+        z, global_z = self.encode(x, edge_index, batch)
+        recon_x = self.decoder(z)
+        pred_met = self.met_head(global_z)
+        return recon_x, pred_met
+
+
+########################################
+# CONTROLLED ARCHITECTURE 4: PERMUTATION-INVARIANT POINT CLOUD (DEEPSETS)
+########################################
+
+class DeepSetsPointNet(nn.Module):
+    """
+    Permutation-Invariant Point Cloud Autoencoder (DeepSets / Particle PointNet).
+    Aggregates per-particle embeddings via global mean pooling, then conditions each
+    particle's reconstruction on the global event context. Zero pairwise edge operations.
+    Architecture matches parameter budget (~5.6k parameters):
+      Particle Encoder: Linear(3 -> 64) -> ELU -> Linear(64 -> 32) -> ELU
+      Global Aggregator: global_mean_pool(phi(x_i)) -> rho in R^32
+      Context Concatenation: z_i = [phi(x_i), rho] in R^64
+      Conditioned Decoder: Linear(64 -> 32) -> ELU -> Linear(32 -> 16) -> ELU -> Linear(16 -> 3)
+      MET Head: Linear(32 -> 16) -> ELU -> Linear(16 -> 2) from rho
+    """
+
+    def __init__(self, input_dim=3, hidden_dim=32):
+        super().__init__()
+        self.particle_encoder = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ELU(),
+            nn.Linear(64, hidden_dim),
+            nn.ELU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, input_dim),
+        )
+        self.met_head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, 2),
+        )
+
+    def encode(self, x, edge_index=None, batch=None):
+        """Encodes particles and conditions on global pooled representation."""
+        phi = self.particle_encoder(x)
+        if batch is not None:
+            rho = global_mean_pool(phi, batch)
+            rho_expanded = rho[batch]
+        else:
+            rho = phi.mean(dim=0, keepdim=True)
+            rho_expanded = rho.expand(phi.size(0), -1)
+        z = torch.cat([phi, rho_expanded], dim=-1)
+        return z, rho
+
+    def forward(self, x, edge_index=None, batch=None):
+        z, rho = self.encode(x, edge_index, batch)
+        recon_x = self.decoder(z)
+        pred_met = self.met_head(rho)
+        return recon_x, pred_met
+
+
+########################################
 # MODEL FACTORY
 ########################################
 
@@ -430,6 +540,8 @@ def create_model(config):
     Supports:
       - 'baseline_mlp': BaselineMLP (tabular MLP autoencoder)
       - 'gat_autoencoder': NodeGNN (GAT autoencoder with optional MET head)
+      - 'node_wise_ae' / 'nodewise_ae': NodeWiseAE (independent per-particle autoencoder)
+      - 'deepsets_pointnet' / 'pointnet': DeepSetsPointNet (permutation-invariant point cloud)
       - 'adversarial_gat': AdversarialNodeGNN (GAT autoencoder with GRL adversary head)
     """
     if hasattr(config, "model"):
@@ -437,7 +549,7 @@ def create_model(config):
         arch = m_cfg.architecture_type
         input_dim = m_cfg.input_dim
         hidden_dim = m_cfg.hidden_dim
-        num_heads = m_cfg.num_heads
+        num_heads = m_cfg.num_heads if hasattr(m_cfg, "num_heads") else 4
     elif isinstance(config, dict):
         m_cfg = config.get("model", {})
         arch = m_cfg.get("architecture_type", "gat_autoencoder")
@@ -451,6 +563,10 @@ def create_model(config):
         return BaselineMLP(input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=8)
     elif arch == "gat_autoencoder":
         return NodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+    elif arch in ("node_wise_ae", "nodewise_ae"):
+        return NodeWiseAE(input_dim=input_dim, hidden_dim=hidden_dim)
+    elif arch in ("deepsets_pointnet", "pointnet"):
+        return DeepSetsPointNet(input_dim=input_dim, hidden_dim=hidden_dim)
     elif arch == "adversarial_gat":
         from src.adversarial_unlearning_ae import AdversarialNodeGNN
         return AdversarialNodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)

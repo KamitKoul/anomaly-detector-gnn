@@ -86,6 +86,111 @@ def grad_reverse(x, alpha=1.0):
 
 
 ########################################
+# SCORE-LEVEL DECORRELATION UTILITIES
+########################################
+
+def compute_distance_correlation(x: torch.Tensor, y: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    """
+    Computes differentiable Distance Correlation squared: dCor^2(X, Y) in PyTorch.
+    dCor^2 is 0 if and only if X and Y are statistically independent.
+    
+    Args:
+        x: 1D Tensor of shape [B] (e.g. event anomaly scores)
+        y: 1D Tensor of shape [B] (e.g. dijet invariant masses)
+    Returns:
+        Scalar tensor dCor^2 in [0, 1].
+    """
+    x = x.view(-1, 1)
+    y = y.view(-1, 1)
+    B = x.size(0)
+    if B <= 1:
+        return torch.tensor(0.0, device=x.device, dtype=x.dtype)
+
+    # 1. Pairwise Euclidean distance matrices
+    a = torch.abs(x - x.t())
+    b = torch.abs(y - y.t())
+
+    # 2. Double centering
+    a_row_mean = a.mean(dim=1, keepdim=True)
+    a_col_mean = a.mean(dim=0, keepdim=True)
+    a_grand_mean = a.mean()
+    A = a - a_row_mean - a_col_mean + a_grand_mean
+
+    b_row_mean = b.mean(dim=1, keepdim=True)
+    b_col_mean = b.mean(dim=0, keepdim=True)
+    b_grand_mean = b.mean()
+    B_mat = b - b_row_mean - b_col_mean + b_grand_mean
+
+    # 3. Distance Covariance & Variances
+    dcov2 = (A * B_mat).sum() / (B * B)
+    dvar_a2 = (A * A).sum() / (B * B)
+    dvar_b2 = (B_mat * B_mat).sum() / (B * B)
+
+    denom = torch.sqrt(torch.clamp(dvar_a2 * dvar_b2, min=eps))
+    dcor2 = dcov2 / denom
+    return torch.clamp(dcor2, min=0.0, max=1.0)
+
+
+class ScoreGRLAdversary(nn.Module):
+    """
+    Adversary predicting dijet invariant mass directly from the scalar anomaly score
+    through a Gradient Reversal Layer (Score-Level GRL).
+    Score -> GRL(-alpha) -> Linear(1 -> 32) -> ELU -> Linear(32 -> 16) -> ELU -> Linear(16 -> 1)
+    """
+
+    def __init__(self, hidden_dim: int = 32):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(1, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, 1),
+        )
+
+    def forward(self, score: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
+        rev_score = grad_reverse(score.view(-1, 1), alpha)
+        return self.net(rev_score)
+
+
+class ScoreDecorrelatedNodeGNN(nn.Module):
+    """
+    GNN Autoencoder with Score-Level Mass Decorrelation (Score-GRL or DisCo).
+    The anomaly score S(G) = (1 / |V|) sum_i ||x_i - hat{x}_i||^2 is computed
+    in the forward pass, and the adversary or DisCo penalty acts directly on S(G).
+    """
+
+    def __init__(self, base_model: nn.Module, decorrelation_type: str = "grl", hidden_dim: int = 32):
+        super().__init__()
+        self.base_model = base_model
+        self.decorrelation_type = decorrelation_type
+        if decorrelation_type == "grl":
+            self.score_adversary = ScoreGRLAdversary(hidden_dim=hidden_dim)
+        else:
+            self.score_adversary = None
+
+    def forward(self, x, edge_index, batch, alpha: float = 1.0):
+        recon_x, pred_met = self.base_model(x, edge_index, batch)
+
+        # Compute event-level scalar anomaly score per graph in batch
+        node_err = (recon_x - x).pow(2).mean(dim=1)
+        num_g = int(batch.max().item()) + 1 if batch is not None else 1
+        device = x.device
+        if batch is not None:
+            c_err = torch.zeros(num_g, device=device).scatter_add_(0, batch, node_err)
+            counts = torch.zeros(num_g, device=device).scatter_add_(0, batch, torch.ones_like(node_err))
+            scores = c_err / counts.clamp(min=1.0)
+        else:
+            scores = node_err.mean().unsqueeze(0)
+
+        pred_mass = None
+        if self.score_adversary is not None:
+            pred_mass = self.score_adversary(scores, alpha=alpha)
+
+        return recon_x, pred_met, scores, pred_mass
+
+
+########################################
 # INVARIANT MASS CALCULATION
 ########################################
 

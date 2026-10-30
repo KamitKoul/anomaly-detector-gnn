@@ -1,0 +1,54 @@
+{
+  "experiment_name": "nodewise_ae_s999",
+  "experiment_family": "controlled_structure",
+  "description": "Model C: Node-wise feedforward autoencoder with zero message passing (self-loops only) (seed=999)",
+  "parent_reference": "controlled_structure_phase2",
+  "seed": 999,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 10000
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 999
+  },
+  "model": {
+    "architecture_type": "node_wise_ae",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.0,
+    "log_pt": true,
+    "include_met_node": false,
+    "phi_met_mode": "none"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.0,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/controlled_structure/nodewise_ae_s999",
+  "metadata": {
+    "model_class": "nodewise_ae",
+    "random_seed": 999,
+    "commit": "dcf9caf39bd10fa8e2f392ada412cb16ffea9864",
+    "branch": "main",
+    "is_dirty": true,
+    "recorded_at": "2026-10-30T06:46:46.775654+00:00",
+    "execution_device": "mps",
+    "dry_run": true
+  }
+}

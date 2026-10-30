@@ -32,6 +32,7 @@ VALID_FAMILIES = (
     "graph_construction",
     "met_weight",
     "mass_decorrelation",
+    "controlled_structure",
 )
 
 
@@ -170,8 +171,8 @@ def validate_config(config: ExperimentConfig) -> List[str]:
             f"Must be one of: {VALID_FAMILIES}"
         )
 
-    if config.graph_construction.delta_r_threshold <= 0:
-        errors.append("delta_r_threshold must be strictly positive.")
+    if config.graph_construction.delta_r_threshold < 0:
+        errors.append("delta_r_threshold cannot be negative.")
 
     if config.training.epochs <= 0:
         errors.append("epochs must be > 0.")
