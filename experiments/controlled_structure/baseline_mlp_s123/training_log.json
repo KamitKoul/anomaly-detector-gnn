@@ -1,0 +1,186 @@
+{
+  "experiment_name": "baseline_mlp_s123",
+  "experiment_family": "controlled_structure",
+  "is_smoke_test": false,
+  "epochs_trained": 20,
+  "events_used": 5000,
+  "total_time_sec": 12.25,
+  "device_diagnostics": {
+    "device": "cuda",
+    "device_type": "cuda",
+    "device_name": "Tesla T4",
+    "allocated_mb": 17.33,
+    "reserved_mb": 22.0,
+    "max_allocated_mb": 17.38
+  },
+  "history": [
+    {
+      "loss": 1.471438692253866,
+      "loss_recon": 1.471438692253866,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 1,
+      "epoch_time_sec": 1.135
+    },
+    {
+      "loss": 0.8546605197487364,
+      "loss_recon": 0.8546605197487364,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 2,
+      "epoch_time_sec": 0.569
+    },
+    {
+      "loss": 0.7480845295699539,
+      "loss_recon": 0.7480845295699539,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 3,
+      "epoch_time_sec": 0.561
+    },
+    {
+      "loss": 0.6887272121799979,
+      "loss_recon": 0.6887272121799979,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 4,
+      "epoch_time_sec": 0.54
+    },
+    {
+      "loss": 0.6585625558142449,
+      "loss_recon": 0.6585625558142449,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 5,
+      "epoch_time_sec": 0.556
+    },
+    {
+      "loss": 0.6425064160565662,
+      "loss_recon": 0.6425064160565662,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 6,
+      "epoch_time_sec": 0.555
+    },
+    {
+      "loss": 0.6280910114573824,
+      "loss_recon": 0.6280910114573824,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 7,
+      "epoch_time_sec": 0.54
+    },
+    {
+      "loss": 0.621106547155198,
+      "loss_recon": 0.621106547155198,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 8,
+      "epoch_time_sec": 0.54
+    },
+    {
+      "loss": 0.6166129093261281,
+      "loss_recon": 0.6166129093261281,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 9,
+      "epoch_time_sec": 0.549
+    },
+    {
+      "loss": 0.6135027438971647,
+      "loss_recon": 0.6135027438971647,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 10,
+      "epoch_time_sec": 0.544
+    },
+    {
+      "loss": 0.6128413597489618,
+      "loss_recon": 0.6128413597489618,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 11,
+      "epoch_time_sec": 0.552
+    },
+    {
+      "loss": 0.6098632254418294,
+      "loss_recon": 0.6098632254418294,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 12,
+      "epoch_time_sec": 0.586
+    },
+    {
+      "loss": 0.6072019224713563,
+      "loss_recon": 0.6072019224713563,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 13,
+      "epoch_time_sec": 0.565
+    },
+    {
+      "loss": 0.6061339291038027,
+      "loss_recon": 0.6061339291038027,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 14,
+      "epoch_time_sec": 0.557
+    },
+    {
+      "loss": 0.6039171190398513,
+      "loss_recon": 0.6039171190398513,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 15,
+      "epoch_time_sec": 0.559
+    },
+    {
+      "loss": 0.602105555640664,
+      "loss_recon": 0.602105555640664,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 16,
+      "epoch_time_sec": 0.567
+    },
+    {
+      "loss": 0.6004913428406806,
+      "loss_recon": 0.6004913428406806,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 17,
+      "epoch_time_sec": 0.566
+    },
+    {
+      "loss": 0.6000065093587159,
+      "loss_recon": 0.6000065093587159,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 18,
+      "epoch_time_sec": 0.566
+    },
+    {
+      "loss": 0.598994218429942,
+      "loss_recon": 0.598994218429942,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 19,
+      "epoch_time_sec": 0.565
+    },
+    {
+      "loss": 0.5974109142449251,
+      "loss_recon": 0.5974109142449251,
+      "loss_met": 0.0,
+      "loss_adv": 0.0,
+      "epoch": 20,
+      "epoch_time_sec": 0.554
+    }
+  ],
+  "final_loss": {
+    "loss": 0.5974109142449251,
+    "loss_recon": 0.5974109142449251,
+    "loss_met": 0.0,
+    "loss_adv": 0.0,
+    "epoch": 20,
+    "epoch_time_sec": 0.554
+  }
+}

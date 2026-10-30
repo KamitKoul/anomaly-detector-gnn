@@ -21,7 +21,9 @@
     "architecture_type": "gat_autoencoder",
     "input_dim": 3,
     "hidden_dim": 32,
-    "num_heads": 4
+    "num_heads": 4,
+    "decorrelation_type": "grl",
+    "score_type": "pt_only"
   },
   "graph_construction": {
     "delta_r_threshold": 0.4,
@@ -44,11 +46,12 @@
   "metadata": {
     "model_class": "gat_relational",
     "random_seed": 999,
-    "commit": "dcf9caf39bd10fa8e2f392ada412cb16ffea9864",
+    "commit": "95ce9ba205f0d3756bce01cc7d2ca021869bc624",
     "branch": "main",
     "is_dirty": true,
-    "recorded_at": "2026-10-30T06:46:34.847619+00:00",
-    "execution_device": "mps",
-    "dry_run": true
+    "recorded_at": "2026-10-30T14:41:40.171447+00:00",
+    "execution_device": "cuda",
+    "gpu_name": "Tesla T4",
+    "dry_run": false
   }
 }
