@@ -53,6 +53,61 @@ def train_and_evaluate_suite(
         print(f"[ERROR] No configuration files found in: {config_dir}")
         return
 
+    # Pre-flight: verify datasets exist or auto-discover from Kaggle
+    bg_target = REPO_ROOT / "data" / "events_LHCO2020_backgroundMC_Pythia.h5"
+    sig_target = REPO_ROOT / "data" / "W_prime_signal.h5"
+    (REPO_ROOT / "data").mkdir(parents=True, exist_ok=True)
+
+    def is_valid_file(p: Path) -> bool:
+        return p.exists() and p.stat().st_size > 100_000_000
+
+    if not is_valid_file(bg_target):
+        # Auto-discover from /kaggle/input or parent directories
+        search_paths = [Path("/kaggle/input"), REPO_ROOT.parent]
+        candidates = []
+        for sp in search_paths:
+            if sp.exists():
+                candidates.extend(sp.glob("**/*background*.h5"))
+        candidates = [c for c in candidates if is_valid_file(c)]
+        if candidates:
+            print(f"[PRE-FLIGHT] Discovered Background dataset at: {candidates[0]}")
+            if bg_target.is_symlink() or bg_target.exists():
+                bg_target.unlink()
+            try:
+                bg_target.symlink_to(candidates[0])
+                print(f"[PRE-FLIGHT] Symlinked to {bg_target}")
+            except Exception as e:
+                print(f"[PRE-FLIGHT] Symlink failed ({e}), will access directly if needed.")
+
+    if not is_valid_file(sig_target):
+        search_paths = [Path("/kaggle/input"), REPO_ROOT.parent]
+        candidates = []
+        for sp in search_paths:
+            if sp.exists():
+                candidates.extend(sp.glob("**/*W_prime*.h5"))
+                candidates.extend(sp.glob("**/*anomalydetection*.h5"))
+        candidates = [c for c in candidates if is_valid_file(c)]
+        if candidates:
+            print(f"[PRE-FLIGHT] Discovered Signal dataset at: {candidates[0]}")
+            if sig_target.is_symlink() or sig_target.exists():
+                sig_target.unlink()
+            try:
+                sig_target.symlink_to(candidates[0])
+                print(f"[PRE-FLIGHT] Symlinked to {sig_target}")
+            except Exception as e:
+                print(f"[PRE-FLIGHT] Symlink failed ({e}), will access directly if needed.")
+
+    # Validate dataset readiness before starting multi-hour run
+    if not is_valid_file(bg_target) and not dry_run:
+        print("\n" + "!" * 80)
+        print(f"[FATAL] Required background dataset is missing or incomplete: {bg_target}")
+        print("Please ensure the dataset is downloaded before running the training suite.")
+        print("In Kaggle, run:")
+        print('  !wget -q --show-progress -c -O data/events_LHCO2020_backgroundMC_Pythia.h5 \\')
+        print('    "https://zenodo.org/api/records/4536624/files/events_LHCO2020_backgroundMC_Pythia.h5/content"')
+        print("!" * 80 + "\n")
+        return
+
     # Phase 1: Train all experiments in suite
     completed_runs = []
     failed_runs = []
@@ -106,6 +161,13 @@ def train_and_evaluate_suite(
         print("[INFO] Dry run finished. Skipping evaluation.")
         return
 
+    if not completed_runs:
+        print("\n" + "!" * 80)
+        print(f"[FATAL] Zero experiments succeeded! Aborting evaluation and bundle creation.")
+        print("Please check the error logs above for failure causes.")
+        print("!" * 80 + "\n")
+        return
+
     # Phase 2: Automated Evaluation with 1000-resample bootstrap
     print("\n" + "=" * 80)
     print(f"PHASE 2: EXECUTING EVALUATION SUITE ({family})")
@@ -130,6 +192,7 @@ def train_and_evaluate_suite(
         zip_path = REPO_ROOT / zip_filename
         print(f"\n[INFO] Compressing outputs into {zip_path}...")
         
+        file_count = 0
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             # Add comparisons
             comp_dir = REPO_ROOT / "comparisons" / family
@@ -138,6 +201,7 @@ def train_and_evaluate_suite(
                     for f in files:
                         p = Path(root) / f
                         zf.write(p, arcname=p.relative_to(REPO_ROOT))
+                        file_count += 1
             # Add experiments (logs and configs, omitting giant scratch files)
             exp_dir = REPO_ROOT / "experiments" / family
             if exp_dir.exists():
@@ -146,11 +210,24 @@ def train_and_evaluate_suite(
                         if f.endswith((".json", ".pt", ".png", ".md")):
                             p = Path(root) / f
                             zf.write(p, arcname=p.relative_to(REPO_ROOT))
+                            file_count += 1
 
-        print(f"[SUCCESS] Archive created: {zip_path} ({zip_path.stat().st_size / (1024**2):.2f} MB)")
-        print("\nTo download in Kaggle notebook, run:")
-        print(f"  from IPython.display import FileLink")
-        print(f"  FileLink('{zip_filename}')")
+        if file_count == 0:
+            print(f"[WARNING] No files found to package for {family}! (0 files added)")
+        else:
+            print(f"[SUCCESS] Archive created: {zip_path} ({file_count} files, {zip_path.stat().st_size / (1024**2):.2f} MB)")
+            # Also copy to /kaggle/working if on Kaggle
+            if Path("/kaggle/working").exists():
+                kaggle_out = Path("/kaggle/working") / zip_filename
+                try:
+                    shutil.copy2(zip_path, kaggle_out)
+                    print(f"[KAGGLE] Copied bundle to {kaggle_out} for sidebar download.")
+                except Exception:
+                    pass
+
+            print("\n" + "=" * 80)
+            print("To download the results bundle, run the download cell provided in the guide.")
+            print("=" * 80)
 
     print(f"\n[ALL DONE] Total pipeline elapsed time: {time.time() - t_suite_start:.1f}s.")
 
