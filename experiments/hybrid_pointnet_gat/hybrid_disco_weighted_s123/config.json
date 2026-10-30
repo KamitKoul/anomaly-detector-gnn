@@ -1,0 +1,57 @@
+{
+  "experiment_name": "hybrid_disco_weighted_s123",
+  "experiment_family": "hybrid_pointnet_gat",
+  "description": "Hybrid PointNet-GAT with Score-Level DisCo on Weighted Score (lambda_adv = 1.0, seed 123)",
+  "parent_reference": "controlled_structure_be84f02",
+  "seed": 123,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 123
+  },
+  "model": {
+    "architecture_type": "score_decorrelated_hybrid",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4,
+    "decorrelation_type": "disco",
+    "score_type": "weighted"
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.1,
+    "adv_loss_weight": 1.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/hybrid_pointnet_gat/hybrid_disco_weighted_s123",
+  "metadata": {
+    "model_class": "pointnet_gat_hybrid",
+    "decorrelation_mechanism": "score_level",
+    "commit": "f97fb9fad46b6a33ef3ed40bf9a638cbeabb2317",
+    "branch": "main",
+    "is_dirty": true,
+    "recorded_at": "2026-10-30T16:41:54.910847+00:00",
+    "execution_device": "cuda",
+    "gpu_name": "Tesla T4",
+    "dry_run": false
+  }
+}
