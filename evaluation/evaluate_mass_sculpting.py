@@ -53,7 +53,7 @@ def compute_jsd(p_samples: np.ndarray, q_samples: np.ndarray, bins: np.ndarray) 
     p_norm = (p_hist + eps) / np.sum(p_hist + eps)
     q_norm = (q_hist + eps) / np.sum(q_hist + eps)
 
-    js_dist = jensenshannon(p_norm, q_norm, base=np.e)
+    js_dist = jensenshannon(p_norm, q_norm, base=2.0)
     return float(js_dist ** 2)
 
 

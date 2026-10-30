@@ -52,6 +52,7 @@ from src.run_lhco_gnn import (
     extract_particles,
     stream_filtered_events,
     get_device,
+    compute_kinematic_recon_loss,
     BaselineMLP,
     NodeGNN,
     NodeWiseAE,
@@ -201,21 +202,31 @@ def train_single_epoch(
 
         with torch.amp.autocast(device_type="cuda", enabled=use_amp):
             if dataset_type == "flat":
-                # Flat tabular autoencoder
+                # Flat tabular autoencoder with periodic phi loss on azimuthal columns
                 batch_x = batch[0].to(device, non_blocking=True)
                 recon_x = model(batch_x)
-                loss_recon = F.mse_loss(recon_x, batch_x)
+                input_dim = batch_x.size(1)
+                pt_cols = list(range(0, input_dim, 3))
+                eta_cols = list(range(1, input_dim, 3))
+                phi_cols = list(range(2, input_dim, 3))
+
+                pt_err = (recon_x[:, pt_cols] - batch_x[:, pt_cols]).pow(2)
+                eta_err = (recon_x[:, eta_cols] - batch_x[:, eta_cols]).pow(2)
+                dphi = torch.abs(recon_x[:, phi_cols] - batch_x[:, phi_cols])
+                phi_err = torch.min(dphi, 2.0 * torch.pi - dphi).pow(2)
+
+                loss_recon = (pt_err.mean() + eta_err.mean() + phi_err.mean()) / 3.0
                 loss = loss_recon
                 loss_met = torch.tensor(0.0, device=device)
                 loss_adv = torch.tensor(0.0, device=device)
             else:
-                # Graph models
+                # Graph models with physically rigorous Riemannian periodic reconstruction loss
                 batch = batch.to(device, non_blocking=True)
                 if isinstance(model, AdversarialNodeGNN):
                     recon_x, pred_met, pred_mass = model(
                         batch.x, batch.edge_index, batch.batch, alpha=grl_alpha
                     )
-                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss_recon, _, _ = compute_kinematic_recon_loss(recon_x, batch.x)
                     loss = loss_recon
 
                     if lambda_met > 0.0:
@@ -234,7 +245,7 @@ def train_single_epoch(
                     recon_x, pred_met, scores, pred_mass = model(
                         batch.x, batch.edge_index, batch.batch, alpha=grl_alpha
                     )
-                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss_recon, _, _ = compute_kinematic_recon_loss(recon_x, batch.x)
                     loss = loss_recon
 
                     if lambda_met > 0.0:
@@ -260,7 +271,7 @@ def train_single_epoch(
 
                 elif isinstance(model, (NodeGNN, NodeWiseAE, DeepSetsPointNet)):
                     recon_x, pred_met = model(batch.x, batch.edge_index, batch.batch)
-                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss_recon, _, _ = compute_kinematic_recon_loss(recon_x, batch.x)
                     loss = loss_recon
 
                     if lambda_met > 0.0:

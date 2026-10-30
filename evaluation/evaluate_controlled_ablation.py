@@ -98,6 +98,43 @@ def compute_jsd_smoothness(
     return js_div, inv_jsd, unc
 
 
+def compute_roc_auc_with_bootstrap(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    num_bootstraps: int = 1000,
+    seed: int = 42,
+) -> Tuple[float, float, Tuple[float, float]]:
+    """
+    Computes ROC-AUC with stratified non-parametric bootstrap uncertainty and 68% CI.
+    Preserves background-to-signal class balance across resamples.
+
+    Returns:
+        auc_nominal, auc_std, (auc_ci_lower, auc_ci_upper)
+    """
+    auc_nominal = float(roc_auc_score(y_true, y_score))
+    idx_bg = np.where(y_true == 0)[0]
+    idx_sig = np.where(y_true == 1)[0]
+    n_bg = len(idx_bg)
+    n_sig = len(idx_sig)
+
+    if n_bg < 5 or n_sig < 5:
+        return auc_nominal, 0.0, (auc_nominal, auc_nominal)
+
+    rng = np.random.RandomState(seed)
+    boot_aucs = []
+    for _ in range(num_bootstraps):
+        b_bg = rng.choice(idx_bg, size=n_bg, replace=True)
+        b_sig = rng.choice(idx_sig, size=n_sig, replace=True)
+        b_idx = np.concatenate([b_bg, b_sig])
+        boot_aucs.append(roc_auc_score(y_true[b_idx], y_score[b_idx]))
+
+    boot_aucs = np.array(boot_aucs)
+    auc_std = float(np.std(boot_aucs))
+    ci_lower = float(np.percentile(boot_aucs, 15.865))
+    ci_upper = float(np.percentile(boot_aucs, 84.135))
+    return auc_nominal, auc_std, (ci_lower, ci_upper)
+
+
 def evaluate_controlled_experiments(
     family: str = "controlled_structure",
     eval_limit: int = 10000,
@@ -171,19 +208,23 @@ def evaluate_controlled_experiments(
                 x_flat = chunk_to_flat_features(batch_evs, input_dim=cfg.model.input_dim, log_pt=cfg.graph_construction.log_pt).to(device)
                 with torch.no_grad():
                     recon = model(x_flat)
-                    diff_sq = (recon - x_flat).pow(2)
-                    err_full = diff_sq.mean(dim=1).cpu().tolist()
-                    # pT columns are 0, 3, 6, ...
-                    pt_cols = list(range(0, cfg.model.input_dim, 3))
-                    ang_cols = [c for c in range(cfg.model.input_dim) if c not in pt_cols]
-                    err_pt = diff_sq[:, pt_cols].mean(dim=1).cpu().tolist()
-                    err_ang = diff_sq[:, ang_cols].mean(dim=1).cpu().tolist()
-                    err_w = (0.8 * diff_sq[:, pt_cols].mean(dim=1) + 0.2 * diff_sq[:, ang_cols].mean(dim=1)).cpu().tolist()
+                    input_dim = cfg.model.input_dim
+                    pt_cols = list(range(0, input_dim, 3))
+                    eta_cols = list(range(1, input_dim, 3))
+                    phi_cols = list(range(2, input_dim, 3))
 
-                sc_full.extend(err_full)
-                sc_pt.extend(err_pt)
-                sc_ang.extend(err_ang)
-                sc_w.extend(err_w)
+                    pt_err = (recon[:, pt_cols] - x_flat[:, pt_cols]).pow(2).mean(dim=1)
+                    eta_err = (recon[:, eta_cols] - x_flat[:, eta_cols]).pow(2).mean(dim=1)
+                    dphi = torch.abs(recon[:, phi_cols] - x_flat[:, phi_cols])
+                    phi_err = torch.min(dphi, 2.0 * torch.pi - dphi).pow(2).mean(dim=1)
+                    ang_err = 0.5 * (eta_err + phi_err)
+                    full_err = (pt_err + eta_err + phi_err) / 3.0
+                    w_err = 0.8 * pt_err + 0.2 * ang_err
+
+                sc_full.extend(full_err.cpu().tolist())
+                sc_pt.extend(pt_err.cpu().tolist())
+                sc_ang.extend(ang_err.cpu().tolist())
+                sc_w.extend(w_err.cpu().tolist())
         else:
             buffer = []
             for ev in events_list:
@@ -200,10 +241,14 @@ def evaluate_controlled_experiments(
                     with torch.no_grad():
                         out = model(batched.x, batched.edge_index, batched.batch)
                         recon_x = out[0] if isinstance(out, (tuple, list)) else out
-                        diff_sq = (recon_x - batched.x).pow(2)
-                        err_pt = diff_sq[:, 0]
-                        err_ang = diff_sq[:, 1:].mean(dim=1)
-                        err_full = diff_sq.mean(dim=1)
+                        
+                        # Kinematic errors with periodic S^1 phi wrapping
+                        err_pt = (recon_x[:, 0] - batched.x[:, 0]).pow(2)
+                        err_eta = (recon_x[:, 1] - batched.x[:, 1]).pow(2)
+                        dphi = torch.abs(recon_x[:, 2] - batched.x[:, 2])
+                        err_phi = torch.min(dphi, 2.0 * torch.pi - dphi).pow(2)
+                        err_ang = 0.5 * (err_eta + err_phi)
+                        err_full = (err_pt + err_eta + err_phi) / 3.0
                         err_w = 0.8 * err_pt + 0.2 * err_ang
 
                         num_g = batched.num_graphs
@@ -223,10 +268,13 @@ def evaluate_controlled_experiments(
                 with torch.no_grad():
                     out = model(batched.x, batched.edge_index, batched.batch)
                     recon_x = out[0] if isinstance(out, (tuple, list)) else out
-                    diff_sq = (recon_x - batched.x).pow(2)
-                    err_pt = diff_sq[:, 0]
-                    err_ang = diff_sq[:, 1:].mean(dim=1)
-                    err_full = diff_sq.mean(dim=1)
+                    
+                    err_pt = (recon_x[:, 0] - batched.x[:, 0]).pow(2)
+                    err_eta = (recon_x[:, 1] - batched.x[:, 1]).pow(2)
+                    dphi = torch.abs(recon_x[:, 2] - batched.x[:, 2])
+                    err_phi = torch.min(dphi, 2.0 * torch.pi - dphi).pow(2)
+                    err_ang = 0.5 * (err_eta + err_phi)
+                    err_full = (err_pt + err_eta + err_phi) / 3.0
                     err_w = 0.8 * err_pt + 0.2 * err_ang
 
                     num_g = batched.num_graphs
@@ -273,20 +321,20 @@ def evaluate_controlled_experiments(
             bg_s = bg_scores_dict[score_key]
             sig_s = sig_scores_dict[score_key]
 
-            # Inclusive ROC
+            # Inclusive ROC with 1000-sample stratified bootstrap
             y_incl = np.array([0] * len(bg_s) + [1] * len(sig_s))
             s_incl = np.concatenate([bg_s, sig_s])
-            auc_incl = float(roc_auc_score(y_incl, s_incl))
+            auc_incl, unc_incl, ci_incl = compute_roc_auc_with_bootstrap(y_incl, s_incl, num_bootstraps=1000)
 
-            # Matched ROC [3300, 3700]
+            # Matched ROC [3300, 3700] GeV
             y_match = np.array([0] * int(np.sum(win_std_bg)) + [1] * int(np.sum(win_std_sig)))
             s_match = np.concatenate([bg_s[win_std_bg], sig_s[win_std_sig]])
-            auc_match = float(roc_auc_score(y_match, s_match))
+            auc_match, unc_match, ci_match = compute_roc_auc_with_bootstrap(y_match, s_match, num_bootstraps=1000)
 
-            # Micro-fine ROC [3450, 3550]
+            # Micro-fine ROC [3450, 3550] GeV
             y_micro = np.array([0] * int(np.sum(win_micro_bg)) + [1] * int(np.sum(win_micro_sig)))
             s_micro = np.concatenate([bg_s[win_micro_bg], sig_s[win_micro_sig]])
-            auc_micro = float(roc_auc_score(y_micro, s_micro))
+            auc_micro, unc_micro, ci_micro = compute_roc_auc_with_bootstrap(y_micro, s_micro, num_bootstraps=1000)
 
             # Background Rejection (1/FPR) at 30% and 50% signal efficiency
             fpr, tpr, _ = roc_curve(y_incl, s_incl)
@@ -303,7 +351,7 @@ def evaluate_controlled_experiments(
             r_val, _ = pearsonr(bg_raw_m, bg_s)
             rho_val, _ = spearmanr(bg_raw_m, bg_s)
 
-            # Mass sculpting cuts (Top 10%, Top 5%, Top 1%)
+            # Mass sculpting cuts (Top 10%, Top 5%) - Strictly standardized base-2 JSD (bits)
             tau_10 = float(np.percentile(bg_s, 90.0))
             cut_10 = bg_s > tau_10
             _, inv_raw_10, unc_raw_10 = compute_jsd_smoothness(bg_raw_m, bg_raw_m[cut_10])
@@ -316,8 +364,14 @@ def evaluate_controlled_experiments(
 
             exp_metrics[score_key] = {
                 "auc_inclusive": round(auc_incl, 4),
+                "auc_inclusive_unc": round(unc_incl, 4),
+                "auc_inclusive_ci": [round(ci_incl[0], 4), round(ci_incl[1], 4)],
                 "auc_matched": round(auc_match, 4),
+                "auc_matched_unc": round(unc_match, 4),
+                "auc_matched_ci": [round(ci_match[0], 4), round(ci_match[1], 4)],
                 "auc_micro_fine": round(auc_micro, 4),
+                "auc_micro_fine_unc": round(unc_micro, 4),
+                "auc_micro_fine_ci": [round(ci_micro[0], 4), round(ci_micro[1], 4)],
                 "rejection_30": round(rej_30, 2) if rej_30 != float("inf") else -1.0,
                 "rejection_50": round(rej_50, 2) if rej_50 != float("inf") else -1.0,
                 "pearson_r": round(float(r_val), 4),
@@ -344,18 +398,22 @@ def evaluate_controlled_experiments(
         json.dump(results, f, indent=2)
     print(f"\n[SUCCESS] Ablation summary written to: {summary_path}")
 
-    # Write Markdown table
+    # Write Markdown table with bootstrap confidence intervals
     md_path = out_dir / "controlled_ablation_table.md"
     with open(md_path, "w") as f:
         f.write("# Controlled Architecture & Anomaly Score Ablation Summary\n\n")
+        f.write("All AUCs reported with 68% stratified bootstrap confidence intervals (1000 resamples).\n")
+        f.write("JSD metrics strictly computed in base-2 (bits).\n\n")
         f.write("| Experiment | Model Class | Seed | Full Matched AUC | pT-Only Matched AUC | Angular Matched AUC | 1/JSD Raw (Top 10%) | Pearson r |\n")
         f.write("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |\n")
         for name, data in sorted(results.items()):
             m = data["metrics"]
             f.write(
                 f"| `{name}` | {data['model_class']} | {data['seed']} | "
-                f"{m['full']['auc_matched']:.4f} | {m['pt_only']['auc_matched']:.4f} | "
-                f"{m['ang_only']['auc_matched']:.4f} | {m['full']['inv_jsd_raw_top10']:.1f} ± {m['full']['inv_jsd_raw_top10_unc']:.1f} | "
+                f"{m['full']['auc_matched']:.4f} ± {m['full']['auc_matched_unc']:.4f} | "
+                f"{m['pt_only']['auc_matched']:.4f} ± {m['pt_only']['auc_matched_unc']:.4f} | "
+                f"{m['ang_only']['auc_matched']:.4f} ± {m['ang_only']['auc_matched_unc']:.4f} | "
+                f"{m['full']['inv_jsd_raw_top10']:.1f} ± {m['full']['inv_jsd_raw_top10_unc']:.1f} | "
                 f"{m['full']['pearson_r']:+.4f} |\n"
             )
     print(f"[SUCCESS] Markdown table written to: {md_path}")

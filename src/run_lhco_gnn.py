@@ -1,6 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch_geometric")
 
+from typing import Tuple, List, Optional, Dict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -134,6 +135,44 @@ def delta_r(eta1, phi1, eta2, phi2):
         d_phi = 2*np.pi - d_phi
 
     return np.sqrt(d_eta**2 + d_phi**2)
+
+
+def periodic_dphi(phi1: torch.Tensor, phi2: torch.Tensor) -> torch.Tensor:
+    """
+    Computes minimum angular difference wrapped onto [0, pi] on the S^1 circle.
+    Differentiable and continuous across the -pi/+pi branch cut seam.
+    """
+    dphi = torch.abs(phi1 - phi2)
+    return torch.min(dphi, 2.0 * torch.pi - dphi)
+
+
+def compute_kinematic_recon_loss(
+    recon: torch.Tensor,
+    target: torch.Tensor,
+    pt_weight: float = 1.0,
+    ang_weight: float = 1.0,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Physically rigorous reconstruction loss for collider coordinates (pT, eta, phi).
+    Respects S^1 periodic Riemannian geometry on azimuthal angle phi.
+
+    Args:
+        recon: Tensor of shape [N, 3] representing [ln(1+pT), eta, phi]
+        target: Tensor of shape [N, 3] representing true [ln(1+pT), eta, phi]
+        pt_weight: Loss weight for pT component
+        ang_weight: Loss weight for angular (eta, phi) component
+
+    Returns:
+        total_loss, loss_pt, loss_ang
+    """
+    pt_err = (recon[:, 0] - target[:, 0]).pow(2)
+    eta_err = (recon[:, 1] - target[:, 1]).pow(2)
+    phi_err = periodic_dphi(recon[:, 2], target[:, 2]).pow(2)
+
+    loss_pt = pt_err.mean()
+    loss_ang = 0.5 * (eta_err.mean() + phi_err.mean())
+    total_loss = pt_weight * loss_pt + ang_weight * loss_ang
+    return total_loss, loss_pt, loss_ang
 
 
 ########################################

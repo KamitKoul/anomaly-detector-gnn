@@ -193,24 +193,25 @@ class ScoreDecorrelatedNodeGNN(nn.Module):
     def forward(self, x, edge_index, batch, alpha: float = 1.0):
         recon_x, pred_met = self.base_model(x, edge_index, batch)
 
-        # Compute per-node error based on score_type
+        # Compute per-node kinematic errors with periodic S^1 phi wrapping
+        pt_err = (recon_x[:, 0] - x[:, 0]).pow(2)
+        eta_err = (recon_x[:, 1] - x[:, 1]).pow(2)
+        dphi = torch.abs(recon_x[:, 2] - x[:, 2])
+        phi_err = torch.min(dphi, 2.0 * torch.pi - dphi).pow(2)
+        ang_err = 0.5 * (eta_err + phi_err)
+
         if self.score_type == "pt_only":
-            node_err = (recon_x[:, 0] - x[:, 0]).pow(2)
+            node_err = pt_err
         elif self.score_type == "weighted":
-            pt_err = (recon_x[:, 0] - x[:, 0]).pow(2)
-            ang_err = (recon_x[:, 1:] - x[:, 1:]).pow(2).mean(dim=1)
             node_err = self.pt_weight * pt_err + self.ang_weight * ang_err
         elif self.score_type == "ang_only":
-            node_err = (recon_x[:, 1:] - x[:, 1:]).pow(2).mean(dim=1)
+            node_err = ang_err
         else:  # "full"
-            node_err = (recon_x - x).pow(2).mean(dim=1)
+            node_err = (pt_err + eta_err + phi_err) / 3.0
 
-        num_g = int(batch.max().item()) + 1 if batch is not None else 1
-        device = x.device
+        # AMP-safe permutation-invariant global pooling without CPU-GPU synchronization
         if batch is not None:
-            c_err = torch.zeros(num_g, device=device).scatter_add_(0, batch, node_err)
-            counts = torch.zeros(num_g, device=device).scatter_add_(0, batch, torch.ones_like(node_err))
-            scores = c_err / counts.clamp(min=1.0)
+            scores = global_mean_pool(node_err.view(-1, 1), batch).view(-1)
         else:
             scores = node_err.mean().unsqueeze(0)
 

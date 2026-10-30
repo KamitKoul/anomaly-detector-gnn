@@ -47,7 +47,7 @@ def calculate_uncertainties(jsd_val, n_total=20000, cut_pct=10.0, num_bins=40, b
         q_boot = np.random.poisson(q_counts).astype(float)
         p_n = (p_boot + 1e-12) / np.sum(p_boot + 1e-12)
         q_n = (q_boot + 1e-12) / np.sum(q_boot + 1e-12)
-        d = jensenshannon(p_n, q_n, base=np.e) ** 2
+        d = jensenshannon(p_n, q_n, base=2.0) ** 2
         boot_jsds.append(d)
         
     boot_jsds = np.array(boot_jsds)
