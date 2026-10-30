@@ -168,6 +168,11 @@ print("\n--- Comparative Results Summary ---")
 !python evaluation/evaluate_mass_correlation.py --family architecture --limit 10000 --signal-limit 5000
 ```
 
+#### Cell 8.2: Deep Physics Diagnostics & Advanced Architectural Investigations
+```python
+!python evaluation/investigate_deep_physics.py --family architecture --limit 10000 --signal-limit 5000
+```
+
 #### Cell 9: Package Results for One-Click Download
 ```python
 !zip -q -r /kaggle/working/phase3_results.zip experiments/ comparisons/
