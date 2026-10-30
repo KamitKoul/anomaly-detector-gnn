@@ -364,17 +364,22 @@ class NodeGNN(torch.nn.Module):
     def recon_head(self, val):
         self.decoder = val
 
+    def encode(self, x, edge_index, batch):
+        """Encodes particle nodes and returns node-level z and pooled global_z."""
+        z = F.elu(self.conv1(x, edge_index))
+        z = F.elu(self.conv2(z, edge_index))
+        global_z = global_mean_pool(z, batch)
+        return z, global_z
+
     def forward(self, x, edge_index, batch):
 
         # Encode
-        z = F.elu(self.conv1(x, edge_index))
-        z = F.elu(self.conv2(z, edge_index))
+        z, global_z = self.encode(x, edge_index, batch)
 
         # Decode: Reconstruct node features
         recon_x = self.decoder(z)
 
         # Decode: Predict global MET
-        global_z = global_mean_pool(z, batch)
         pred_met = self.met_head(global_z)
 
         return recon_x, pred_met

@@ -160,7 +160,12 @@ print("\n--- Comparative Results Summary ---")
 
 #### Cell 8: Background Mass-Sculpting & 1/JSD Evaluation
 ```python
-!python evaluation/evaluate_mass_sculpting.py --family architecture --limit 2000
+!python evaluation/evaluate_mass_sculpting.py --family architecture --limit 20000
+```
+
+#### Cell 8.1: Mass Correlation, Matched-Mass ROC, and Adversarial Latent Probes
+```python
+!python evaluation/evaluate_mass_correlation.py --family architecture --limit 10000 --signal-limit 5000
 ```
 
 #### Cell 9: Package Results for One-Click Download

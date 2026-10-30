@@ -162,21 +162,24 @@ class AdversarialNodeGNN(nn.Module):
             nn.Linear(16, 1),
         )
 
-    def forward(self, x, edge_index, batch, alpha=1.0):
-        # 1. Spatial Message Passing
+    def encode(self, x, edge_index, batch):
+        """Encodes particle nodes and returns node-level z and pooled global_z."""
         z = F.elu(self.conv1(x, edge_index))
         z = F.elu(self.conv2(z, edge_index))
+        global_z = global_mean_pool(z, batch)
+        return z, global_z
+
+    def forward(self, x, edge_index, batch, alpha=1.0):
+        # 1. Spatial Message Passing & Global Pooling
+        z, global_z = self.encode(x, edge_index, batch)
 
         # 2. Particle Reconstruction
         recon_x = self.decoder(z)
 
-        # 3. Global Graph Pooling
-        global_z = global_mean_pool(z, batch)
-
-        # 4. Global MET Prediction
+        # 3. Global MET Prediction
         pred_met = self.met_head(global_z)
 
-        # 5. Adversarial Invariant Mass Prediction (via GRL)
+        # 4. Adversarial Invariant Mass Prediction (via GRL)
         reversed_z = grad_reverse(global_z, alpha)
         pred_mass = self.adversary(reversed_z)
 
