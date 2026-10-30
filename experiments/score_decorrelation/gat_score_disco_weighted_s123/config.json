@@ -1,0 +1,57 @@
+{
+  "experiment_name": "gat_score_disco_weighted_s123",
+  "experiment_family": "score_decorrelation",
+  "description": "Score-Level DisCo on Weighted Anomaly Score (0.8 pT + 0.2 Ang, lambda_adv = 1.0, seed 123)",
+  "parent_reference": "controlled_structure_f5baacd",
+  "seed": 123,
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 123
+  },
+  "model": {
+    "architecture_type": "score_decorrelated_gat",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4,
+    "decorrelation_type": "disco",
+    "score_type": "weighted"
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.1,
+    "adv_loss_weight": 1.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "output_dir": "experiments/score_decorrelation/gat_score_disco_weighted_s123",
+  "metadata": {
+    "model_class": "score_disco_weighted",
+    "decorrelation_mechanism": "score_level",
+    "commit": "fc5126f6b3f87781f6ac9796245510b6987fec8b",
+    "branch": "main",
+    "is_dirty": true,
+    "recorded_at": "2026-10-30T15:55:19.134762+00:00",
+    "execution_device": "cuda",
+    "gpu_name": "Tesla T4",
+    "dry_run": false
+  }
+}

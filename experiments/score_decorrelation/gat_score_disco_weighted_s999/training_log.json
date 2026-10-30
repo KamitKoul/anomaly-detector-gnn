@@ -1,0 +1,186 @@
+{
+  "experiment_name": "gat_score_disco_weighted_s999",
+  "experiment_family": "score_decorrelation",
+  "is_smoke_test": false,
+  "epochs_trained": 20,
+  "events_used": 5000,
+  "total_time_sec": 73.28,
+  "device_diagnostics": {
+    "device": "cuda",
+    "device_type": "cuda",
+    "device_name": "Tesla T4",
+    "allocated_mb": 17.36,
+    "reserved_mb": 2624.0,
+    "max_allocated_mb": 479.65
+  },
+  "history": [
+    {
+      "loss": 444.52776934386816,
+      "loss_recon": 1.972785317973726,
+      "loss_met": 4424.459326482882,
+      "loss_adv": 0.1090417795690002,
+      "epoch": 1,
+      "epoch_time_sec": 3.231
+    },
+    {
+      "loss": 442.48621703712803,
+      "loss_recon": 1.0660157230249636,
+      "loss_met": 4413.019694528762,
+      "loss_adv": 0.11822295779730105,
+      "epoch": 2,
+      "epoch_time_sec": 3.202
+    },
+    {
+      "loss": 444.07130286344295,
+      "loss_recon": 1.0448487955293837,
+      "loss_met": 4429.10303123134,
+      "loss_adv": 0.1161420309714451,
+      "epoch": 3,
+      "epoch_time_sec": 3.153
+    },
+    {
+      "loss": 458.8005207814988,
+      "loss_recon": 1.020315213947539,
+      "loss_met": 4576.618793852011,
+      "loss_adv": 0.11831739153357068,
+      "epoch": 4,
+      "epoch_time_sec": 3.181
+    },
+    {
+      "loss": 444.02129125898813,
+      "loss_recon": 0.9986214489693854,
+      "loss_met": 4429.079201084793,
+      "loss_adv": 0.11474435821555223,
+      "epoch": 5,
+      "epoch_time_sec": 3.242
+    },
+    {
+      "loss": 442.40789377005996,
+      "loss_recon": 0.9871108960953487,
+      "loss_met": 4413.097423772144,
+      "loss_adv": 0.11103182326361632,
+      "epoch": 6,
+      "epoch_time_sec": 3.191
+    },
+    {
+      "loss": 442.32509617896596,
+      "loss_recon": 0.9773237595132961,
+      "loss_met": 4412.407928661176,
+      "loss_adv": 0.10697265465263349,
+      "epoch": 7,
+      "epoch_time_sec": 3.171
+    },
+    {
+      "loss": 442.2070771235569,
+      "loss_recon": 0.9751092670070138,
+      "loss_met": 4411.158906001194,
+      "loss_adv": 0.11607109691212132,
+      "epoch": 8,
+      "epoch_time_sec": 3.214
+    },
+    {
+      "loss": 443.44827698142666,
+      "loss_recon": 0.9689472405014524,
+      "loss_met": 4423.689902530355,
+      "loss_adv": 0.11033058698010292,
+      "epoch": 9,
+      "epoch_time_sec": 3.175
+    },
+    {
+      "loss": 442.3301720102881,
+      "loss_recon": 0.9683433144715181,
+      "loss_met": 4412.4580342481095,
+      "loss_adv": 0.11601505397706274,
+      "epoch": 10,
+      "epoch_time_sec": 3.216
+    },
+    {
+      "loss": 443.10002398642763,
+      "loss_recon": 0.9660617640823316,
+      "loss_met": 4420.1818692152665,
+      "loss_adv": 0.11576766022451364,
+      "epoch": 11,
+      "epoch_time_sec": 3.192
+    },
+    {
+      "loss": 443.41700540530456,
+      "loss_recon": 0.9599474782397033,
+      "loss_met": 4423.395033526573,
+      "loss_adv": 0.11754550469244361,
+      "epoch": 12,
+      "epoch_time_sec": 3.23
+    },
+    {
+      "loss": 442.1123901172808,
+      "loss_recon": 0.9576538288669222,
+      "loss_met": 4410.356128085191,
+      "loss_adv": 0.11911593882995807,
+      "epoch": 13,
+      "epoch_time_sec": 3.222
+    },
+    {
+      "loss": 441.6860159126816,
+      "loss_recon": 0.953570659752864,
+      "loss_met": 4406.126286792148,
+      "loss_adv": 0.11981106003758255,
+      "epoch": 14,
+      "epoch_time_sec": 3.196
+    },
+    {
+      "loss": 441.5242910202901,
+      "loss_recon": 0.9475681197111774,
+      "loss_met": 4404.607610034335,
+      "loss_adv": 0.11595473614088289,
+      "epoch": 15,
+      "epoch_time_sec": 3.229
+    },
+    {
+      "loss": 446.39282906890674,
+      "loss_recon": 0.9406926157368216,
+      "loss_met": 4453.343983255374,
+      "loss_adv": 0.1177307754802476,
+      "epoch": 16,
+      "epoch_time_sec": 3.171
+    },
+    {
+      "loss": 441.08752431687276,
+      "loss_recon": 0.9374228966463903,
+      "loss_met": 4400.333627494278,
+      "loss_adv": 0.11673178746821775,
+      "epoch": 17,
+      "epoch_time_sec": 3.181
+    },
+    {
+      "loss": 451.79872646453276,
+      "loss_recon": 0.9379984933859223,
+      "loss_met": 4507.4536397168595,
+      "loss_adv": 0.11535782274451985,
+      "epoch": 18,
+      "epoch_time_sec": 3.199
+    },
+    {
+      "loss": 442.43603428154233,
+      "loss_recon": 0.9371808353503039,
+      "loss_met": 4413.797238878384,
+      "loss_adv": 0.1191195531920263,
+      "epoch": 19,
+      "epoch_time_sec": 3.182
+    },
+    {
+      "loss": 440.563643534472,
+      "loss_recon": 0.9399578837072773,
+      "loss_met": 4395.085952272841,
+      "loss_adv": 0.11508268881945094,
+      "epoch": 20,
+      "epoch_time_sec": 3.213
+    }
+  ],
+  "final_loss": {
+    "loss": 440.563643534472,
+    "loss_recon": 0.9399578837072773,
+    "loss_met": 4395.085952272841,
+    "loss_adv": 0.11508268881945094,
+    "epoch": 20,
+    "epoch_time_sec": 3.213
+  }
+}

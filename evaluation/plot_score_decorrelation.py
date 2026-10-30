@@ -40,14 +40,13 @@ def main():
     with open(summary_path) as f:
         data = json.load(f)
         
-    # Group configurations
-    # We display representative architectures & multi-seed averages
+    # Group configurations: multi-seed groups (N=3) and single-run controls
     groups = [
-        ("Control Ref\n(λ=0)", "gat_baseline_ref_s42"),
-        ("DisCo Heavy\n(λ=2.5)", "gat_score_disco_heavy_s42"),
-        ("DisCo Std\n(Seed 42)", "gat_score_disco_s42"),
-        ("DisCo Weighted\n(Optimized)", "gat_score_disco_weighted_s42"),
-        ("GRL Adv\n(Seed 42)", "gat_score_grl_s42"),
+        ("Control Ref\n(λ=0, N=3)", ["gat_baseline_ref_s42", "gat_baseline_ref_s123", "gat_baseline_ref_s999"]),
+        ("DisCo Heavy\n(λ=2.5, N=1)", ["gat_score_disco_heavy_s42"]),
+        ("DisCo Std\n(pT, λ=1.0, N=3)", ["gat_score_disco_s42", "gat_score_disco_s123", "gat_score_disco_s999"]),
+        ("DisCo Weighted\n(0.8pT+0.2Ω, N=3)", ["gat_score_disco_weighted_s42", "gat_score_disco_weighted_s123", "gat_score_disco_weighted_s999"]),
+        ("GRL Adv\n(λ=0.05, N=3)", ["gat_score_grl_s42", "gat_score_grl_s123", "gat_score_grl_s999"]),
     ]
     
     fig, axes = plt.subplots(2, 2, figsize=(15, 11))
@@ -70,27 +69,35 @@ def main():
     auc_ang, unc_ang = [], []
     auc_w, unc_w = [], []
     
-    for label, exp_id in groups:
-        m = data[exp_id]["metrics"]
-        auc_full.append(m["full"]["auc_matched"])
-        unc_full.append(m["full"]["auc_matched_unc"])
-        auc_pt.append(m["pt_only"]["auc_matched"])
-        unc_pt.append(m["pt_only"]["auc_matched_unc"])
-        auc_ang.append(m["ang_only"]["auc_matched"])
-        unc_ang.append(m["ang_only"]["auc_matched_unc"])
-        auc_w.append(m["weighted"]["auc_matched"])
-        unc_w.append(m["weighted"]["auc_matched_unc"])
+    for label, exp_list in groups:
+        # Compute mean and sample std (or bootstrap unc if N=1)
+        af = [data[e]["metrics"]["full"]["auc_matched"] for e in exp_list]
+        ap = [data[e]["metrics"]["pt_only"]["auc_matched"] for e in exp_list]
+        aa = [data[e]["metrics"]["ang_only"]["auc_matched"] for e in exp_list]
+        aw = [data[e]["metrics"]["weighted"]["auc_matched"] for e in exp_list]
+        
+        auc_full.append(float(np.mean(af)))
+        unc_full.append(float(np.std(af, ddof=1) if len(af) > 1 else data[exp_list[0]]["metrics"]["full"]["auc_matched_unc"]))
+        
+        auc_pt.append(float(np.mean(ap)))
+        unc_pt.append(float(np.std(ap, ddof=1) if len(ap) > 1 else data[exp_list[0]]["metrics"]["pt_only"]["auc_matched_unc"]))
+        
+        auc_ang.append(float(np.mean(aa)))
+        unc_ang.append(float(np.std(aa, ddof=1) if len(aa) > 1 else data[exp_list[0]]["metrics"]["ang_only"]["auc_matched_unc"]))
+        
+        auc_w.append(float(np.mean(aw)))
+        unc_w.append(float(np.std(aw, ddof=1) if len(aw) > 1 else data[exp_list[0]]["metrics"]["weighted"]["auc_matched_unc"]))
         
     ax.bar(x - 1.5*width, auc_full, width, yerr=unc_full, capsize=3, label=r'Full 3D Recon ($p_T, \eta, \phi$)', color=c_full, alpha=0.9)
     ax.bar(x - 0.5*width, auc_pt, width, yerr=unc_pt, capsize=3, label=r'$p_T$-Only Recon', color=c_pt, alpha=0.9)
-    ax.bar(x + 0.5*width, auc_w, width, yerr=unc_w, capsize=3, label=r'Weighted Recon ($0.95 p_T + 0.05 \Omega$)', color=c_weight, alpha=0.9)
+    ax.bar(x + 0.5*width, auc_w, width, yerr=unc_w, capsize=3, label=r'Weighted Recon ($0.80 p_T + 0.20 \Omega$)', color=c_weight, alpha=0.9)
     ax.bar(x + 1.5*width, auc_ang, width, yerr=unc_ang, capsize=3, label=r'Angular-Only ($\Delta\eta, \Delta\phi$)', color=c_ang, alpha=0.9)
     
     ax.axhline(0.5, color='gray', linestyle='--', alpha=0.6, label='Random Chance (0.50)')
     ax.set_xticks(x)
     ax.set_xticklabels([g[0] for g in groups])
     ax.set_ylabel(r'Matched ROC-AUC ($m_{jj} \in [3.3, 3.7]$ TeV)')
-    ax.set_title(r'(a) Anomaly Discrimination Across Score Formulations (68% Bootstrap CI)')
+    ax.set_title(r'(a) Anomaly Discrimination Across Architectures (Multi-Seed Mean ± $s_{N-1}$)')
     ax.set_ylim(0.25, 0.85)
     ax.legend(loc='lower left', frameon=True, fontsize=9)
     
@@ -102,28 +109,31 @@ def main():
     jsd_raw, unc_raw = [], []
     jsd_rsd, unc_rsd = [], []
     
-    for label, exp_id in groups:
+    for label, exp_list in groups:
         # Full score JSD
-        m = data[exp_id]["metrics"]["full"]
-        jsd_raw.append(m["inv_jsd_raw_top10"])
-        unc_raw.append(m["inv_jsd_raw_top10_unc"])
-        jsd_rsd.append(m["inv_jsd_rsd_top10"])
-        unc_rsd.append(m["inv_jsd_rsd_top10_unc"])
+        jr = [data[e]["metrics"]["full"]["inv_jsd_raw_top10"] for e in exp_list]
+        js = [data[e]["metrics"]["full"]["inv_jsd_rsd_top10"] for e in exp_list]
+        
+        jsd_raw.append(float(np.mean(jr)))
+        unc_raw.append(float(np.std(jr, ddof=1) if len(jr) > 1 else data[exp_list[0]]["metrics"]["full"]["inv_jsd_raw_top10_unc"]))
+        
+        jsd_rsd.append(float(np.mean(js)))
+        unc_rsd.append(float(np.std(js, ddof=1) if len(js) > 1 else data[exp_list[0]]["metrics"]["full"]["inv_jsd_rsd_top10_unc"]))
         
     ax.bar(x - 0.5*w_b, jsd_raw, w_b, yerr=unc_raw, capsize=4, label=r'Raw Dijet Mass $m_{jj}$ ($1/\mathrm{JSD}$)', color="#4575b4", alpha=0.9)
     ax.bar(x + 0.5*w_b, jsd_rsd, w_b, yerr=unc_rsd, capsize=4, label=r'SoftDrop $m_{\mathrm{RSD}}$ ($1/\mathrm{JSD}$)', color="#e08214", alpha=0.9)
     
-    # Highlight DisCo Weighted jump
-    ax.annotate(r'$\mathbf{2.34\times}$ Invariance Boost' + '\n' + r'($1/\mathrm{JSD} = 75.0 \pm 9.2$)',
+    # Highlight DisCo Weighted jump across 3 seeds
+    ax.annotate(r'$\mathbf{1.61\times}$ Replicated Invariance Boost' + '\n' + r'($1/\mathrm{JSD} = 68.2 \pm 6.8$, N=3)',
                 xy=(3 - 0.5*w_b, jsd_raw[3]),
-                xytext=(2.2, 85),
+                xytext=(2.1, 85),
                 arrowprops=dict(facecolor='black', shrink=0.08, width=1.5, headwidth=6),
                 fontsize=9.5, fontweight='bold', bbox=dict(boxstyle="round,pad=0.3", fc="#e5f5e0", ec="#31a354", lw=1.5))
     
     ax.set_xticks(x)
     ax.set_xticklabels([g[0] for g in groups])
     ax.set_ylabel(r'Mass Preservation Metric: $1/\mathrm{JSD}$ (bits$^{-1}$)')
-    ax.set_title(r'(b) Background Mass Invariance at Top 10% Operating Cut')
+    ax.set_title(r'(b) Background Mass Invariance at Top 10% Cut (Multi-Seed Mean ± $s_{N-1}$)')
     ax.set_ylim(0, 110)
     ax.legend(loc='upper left', frameon=True)
     
@@ -201,12 +211,16 @@ def main():
     ax = axes[1, 1]
     
     r_full, r_pt, r_ang, r_w = [], [], [], []
-    for label, exp_id in groups:
-        m = data[exp_id]["metrics"]
-        r_full.append(m["full"]["pearson_r"])
-        r_pt.append(m["pt_only"]["pearson_r"])
-        r_ang.append(m["ang_only"]["pearson_r"])
-        r_w.append(m["weighted"]["pearson_r"])
+    for label, exp_list in groups:
+        rf = [data[e]["metrics"]["full"]["pearson_r"] for e in exp_list]
+        rp = [data[e]["metrics"]["pt_only"]["pearson_r"] for e in exp_list]
+        ra = [data[e]["metrics"]["ang_only"]["pearson_r"] for e in exp_list]
+        rw = [data[e]["metrics"]["weighted"]["pearson_r"] for e in exp_list]
+        
+        r_full.append(float(np.mean(rf)))
+        r_pt.append(float(np.mean(rp)))
+        r_ang.append(float(np.mean(ra)))
+        r_w.append(float(np.mean(rw)))
         
     ax.bar(x - 1.5*width, r_full, width, label=r'Full 3D Recon', color=c_full, alpha=0.9)
     ax.bar(x - 0.5*width, r_pt, width, label=r'$p_T$-Only Recon', color=c_pt, alpha=0.9)

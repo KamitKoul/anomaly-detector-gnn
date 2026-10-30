@@ -46,12 +46,11 @@
   "metadata": {
     "model_class": "score_disco_weighted",
     "decorrelation_mechanism": "score_level",
-    "commit": "95ce9ba205f0d3756bce01cc7d2ca021869bc624",
+    "commit": "fc5126f6b3f87781f6ac9796245510b6987fec8b",
     "branch": "main",
     "is_dirty": true,
-    "recorded_at": "2026-10-30T13:45:09.303824+00:00",
-    "execution_device": "cuda",
-    "gpu_name": "Tesla T4",
-    "dry_run": false
+    "recorded_at": "2026-10-30T15:48:48.380768+00:00",
+    "execution_device": "mps",
+    "dry_run": true
   }
 }
