@@ -57,6 +57,7 @@ from src.run_lhco_gnn import (
     NodeGNN,
     NodeWiseAE,
     DeepSetsPointNet,
+    PointNetGATHybrid,
 )
 from src.adversarial_unlearning_ae import (
     AdversarialNodeGNN,
@@ -269,7 +270,7 @@ def train_single_epoch(
                     else:
                         loss_adv = torch.tensor(0.0, device=device)
 
-                elif isinstance(model, (NodeGNN, NodeWiseAE, DeepSetsPointNet)):
+                elif isinstance(model, (NodeGNN, NodeWiseAE, DeepSetsPointNet, PointNetGATHybrid)):
                     recon_x, pred_met = model(batch.x, batch.edge_index, batch.batch)
                     loss_recon, _, _ = compute_kinematic_recon_loss(recon_x, batch.x)
                     loss = loss_recon
