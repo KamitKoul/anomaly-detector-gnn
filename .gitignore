@@ -35,3 +35,4 @@ client_secrets*.json
 # Generated experiment binaries (checkpoints & large prediction arrays)
 experiments/**/*.pt
 experiments/**/*.npz
+experiments/test_dry_runs/

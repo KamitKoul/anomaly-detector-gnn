@@ -62,6 +62,10 @@ To force physical understanding into the latent embeddings, the network concurre
 
 | Path | Purpose | Critical Operations |
 | :--- | :--- | :--- |
+| `notebooks/phase3_kaggle.ipynb` | Kaggle GPU Pipeline | Dedicated Kaggle notebook for Phase 3 ablation experiments (30 free GPU hours/wk). |
+| `KAGGLE_WORKFLOW.md` | Kaggle GPU Guide | Complete step-by-step documentation for training on Kaggle NVIDIA GPUs. |
+| `notebooks/phase3_colab.ipynb` | Colab GPU Pipeline | Dedicated Colab notebook for Phase 3 ablation experiments. |
+| `COLAB_WORKFLOW.md` | Colab GPU Guide | Step-by-step documentation for Google Colab GPU training. |
 | `src/run_lhco_gnn.py` | Model Schema & Graphing | Defines the `NodeGNN` architecture and `event_to_graph` transformers. |
 | `src/stream_lhco_loader.py` | Memory-Safe Data Loader | Uses `tables.open_file` for chunked OOM-safe read-throughs of 2.6GB HDF5 archives. |
 | `src/anomaly_detection_ae.py` | Core Training Engine | Orchestrates Multi-Task discovery training and node-level background scoring. |
