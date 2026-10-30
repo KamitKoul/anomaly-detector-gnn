@@ -53,6 +53,7 @@ from src.run_lhco_gnn import (
     get_device,
 )
 from src.physics_grooming import compute_groomed_dijet_mass
+from src.adversarial_unlearning_ae import compute_distance_correlation
 
 
 def compute_jsd_smoothness(
@@ -350,8 +351,13 @@ def evaluate_controlled_experiments(
             # Correlation with mass
             r_val, _ = pearsonr(bg_raw_m, bg_s)
             rho_val, _ = spearmanr(bg_raw_m, bg_s)
+            with torch.no_grad():
+                dcor_val = float(compute_distance_correlation(
+                    torch.tensor(bg_s, dtype=torch.float32),
+                    torch.tensor(bg_raw_m, dtype=torch.float32)
+                ).item())
 
-            # Mass sculpting cuts (Top 10%, Top 5%) - Strictly standardized base-2 JSD (bits)
+            # Mass sculpting cuts (Top 10%, Top 5%, Top 1%) - Strictly standardized base-2 JSD (bits)
             tau_10 = float(np.percentile(bg_s, 90.0))
             cut_10 = bg_s > tau_10
             _, inv_raw_10, unc_raw_10 = compute_jsd_smoothness(bg_raw_m, bg_raw_m[cut_10])
@@ -361,6 +367,11 @@ def evaluate_controlled_experiments(
             cut_5 = bg_s > tau_5
             _, inv_raw_5, unc_raw_5 = compute_jsd_smoothness(bg_raw_m, bg_raw_m[cut_5])
             _, inv_rsd_5, unc_rsd_5 = compute_jsd_smoothness(bg_rsd_m, bg_rsd_m[cut_5])
+
+            tau_1 = float(np.percentile(bg_s, 99.0))
+            cut_1 = bg_s > tau_1
+            _, inv_raw_1, unc_raw_1 = compute_jsd_smoothness(bg_raw_m, bg_raw_m[cut_1])
+            _, inv_rsd_1, unc_rsd_1 = compute_jsd_smoothness(bg_rsd_m, bg_rsd_m[cut_1])
 
             exp_metrics[score_key] = {
                 "auc_inclusive": round(auc_incl, 4),
@@ -376,12 +387,19 @@ def evaluate_controlled_experiments(
                 "rejection_50": round(rej_50, 2) if rej_50 != float("inf") else -1.0,
                 "pearson_r": round(float(r_val), 4),
                 "spearman_rho": round(float(rho_val), 4),
+                "distance_correlation": round(dcor_val, 4),
                 "inv_jsd_raw_top10": round(inv_raw_10, 2),
                 "inv_jsd_raw_top10_unc": round(unc_raw_10, 2),
                 "inv_jsd_rsd_top10": round(inv_rsd_10, 2),
                 "inv_jsd_rsd_top10_unc": round(unc_rsd_10, 2),
                 "inv_jsd_raw_top5": round(inv_raw_5, 2),
                 "inv_jsd_raw_top5_unc": round(unc_raw_5, 2),
+                "inv_jsd_rsd_top5": round(inv_rsd_5, 2),
+                "inv_jsd_rsd_top5_unc": round(unc_rsd_5, 2),
+                "inv_jsd_raw_top1": round(inv_raw_1, 2),
+                "inv_jsd_raw_top1_unc": round(unc_raw_1, 2),
+                "inv_jsd_rsd_top1": round(inv_rsd_1, 2),
+                "inv_jsd_rsd_top1_unc": round(unc_rsd_1, 2),
             }
 
         results[exp_name] = {

@@ -24,27 +24,29 @@
     "metric": "reconstruction_mse",
     "percentile_threshold": 90.0
   },
-  "experiment_name": "hybrid_baseline_s123",
-  "description": "Hybrid PointNet-GAT Autoencoder Baseline (lambda_adv = 0.0, seed 123)",
+  "experiment_name": "hybrid_h3_lambda050_s123",
+  "description": "Hybrid PointNet-GAT DisCo Sweep H3 (lambda_adv = 0.50, seed 123)",
   "seed": 123,
   "model": {
-    "architecture_type": "pointnet_gat_hybrid",
+    "architecture_type": "score_decorrelated_hybrid",
     "input_dim": 3,
     "hidden_dim": 32,
     "num_heads": 4,
-    "decorrelation_type": "none",
+    "decorrelation_type": "disco",
     "score_type": "weighted"
   },
   "objectives": {
     "loss_recon_type": "mse",
     "met_loss_weight": 0.1,
-    "adv_loss_weight": 0.0,
+    "adv_loss_weight": 0.5,
     "grl_alpha": 1.0,
     "mass_norm_gev": 1000.0
   },
-  "output_dir": "experiments/hybrid_pointnet_gat/hybrid_baseline_s123",
+  "output_dir": "experiments/hybrid_pointnet_gat/hybrid_h3_lambda050_s123",
   "metadata": {
     "model_class": "pointnet_gat_hybrid",
-    "decorrelation_mechanism": "none"
+    "decorrelation_mechanism": "score_level",
+    "lambda_disco": 0.5,
+    "sweep_tag": "h3"
   }
 }

@@ -190,6 +190,7 @@ def train_single_epoch(
     recon_loss_sum = 0.0
     met_loss_sum = 0.0
     adv_loss_sum = 0.0
+    grad_norm_sum = 0.0
     num_batches = 0
 
     lambda_met = config.objectives.met_loss_weight
@@ -286,6 +287,8 @@ def train_single_epoch(
                     raise ValueError(f"Unknown model class: {type(model)}")
 
         loss.backward()
+        total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=50.0)
+        grad_norm_sum += float(total_norm.item() if hasattr(total_norm, "item") else total_norm)
         optimizer.step()
 
         total_loss += loss.item()
@@ -304,6 +307,8 @@ def train_single_epoch(
         "loss_recon": recon_loss_sum / max(num_batches, 1),
         "loss_met": met_loss_sum / max(num_batches, 1),
         "loss_adv": adv_loss_sum / max(num_batches, 1),
+        "grad_norm": grad_norm_sum / max(num_batches, 1),
+        "lr": optimizer.param_groups[0]["lr"],
     }
 
 
@@ -434,6 +439,7 @@ def run_training_experiment(
             f"Recon: {metrics['loss_recon']:.5f} | "
             f"MET: {metrics['loss_met']:.5f} | "
             f"Adv: {metrics['loss_adv']:.5f} | "
+            f"Grad: {metrics['grad_norm']:.3f} | "
             f"Time: {metrics['epoch_time_sec']}s"
             f"{mem_str}"
         )

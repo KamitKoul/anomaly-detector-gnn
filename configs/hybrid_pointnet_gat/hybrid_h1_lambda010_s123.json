@@ -24,8 +24,8 @@
     "metric": "reconstruction_mse",
     "percentile_threshold": 90.0
   },
-  "experiment_name": "hybrid_disco_weighted_s123",
-  "description": "Hybrid PointNet-GAT with Score-Level DisCo on Weighted Score (lambda_adv = 1.0, seed 123)",
+  "experiment_name": "hybrid_h1_lambda010_s123",
+  "description": "Hybrid PointNet-GAT DisCo Sweep H1 (lambda_adv = 0.10, seed 123)",
   "seed": 123,
   "model": {
     "architecture_type": "score_decorrelated_hybrid",
@@ -38,13 +38,15 @@
   "objectives": {
     "loss_recon_type": "mse",
     "met_loss_weight": 0.1,
-    "adv_loss_weight": 1.0,
+    "adv_loss_weight": 0.1,
     "grl_alpha": 1.0,
     "mass_norm_gev": 1000.0
   },
-  "output_dir": "experiments/hybrid_pointnet_gat/hybrid_disco_weighted_s123",
+  "output_dir": "experiments/hybrid_pointnet_gat/hybrid_h1_lambda010_s123",
   "metadata": {
     "model_class": "pointnet_gat_hybrid",
-    "decorrelation_mechanism": "score_level"
+    "decorrelation_mechanism": "score_level",
+    "lambda_disco": 0.1,
+    "sweep_tag": "h1"
   }
 }
