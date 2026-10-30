@@ -135,6 +135,8 @@ def evaluate_model_mass_sculpting(
                 masses_rsd.append(rsd_m)
 
             count += take_len
+            if count % 500 < take_len or count == eval_limit:
+                print(f"  [PROGRESS] Evaluated mass sculpting for {count}/{eval_limit} events...")
             if count >= eval_limit:
                 break
     else:
@@ -189,6 +191,8 @@ def evaluate_model_mass_sculpting(
                 masses_rsd.append(rsd_m)
 
                 count += 1
+                if count % 250 == 0 or count == eval_limit:
+                    print(f"  [PROGRESS] Evaluated mass sculpting for {count}/{eval_limit} events...")
                 if len(graph_buffer) >= batch_size:
                     flush_graphs()
             if count >= eval_limit:
@@ -306,7 +310,7 @@ def main():
     parser.add_argument(
         "--limit",
         type=int,
-        default=10000,
+        default=2000,
         help="Number of background events to evaluate for mass sculpting",
     )
     args = parser.parse_args()

@@ -75,6 +75,7 @@ def cluster_cambridge_aachen(
       d_iB = R_0^2
     Iteratively merges the closest pair until all remaining clusters have Delta R > R_0.
     Returns clustered jets sorted by descending transverse momentum (pT).
+    Optimized with vectorized pairwise distance matrices.
     """
     nodes: List[ClusterNode] = []
     for p in particles:
@@ -85,33 +86,54 @@ def cluster_cambridge_aachen(
         return []
 
     r0_sq = r0 ** 2
+    eta = np.array([n.eta for n in nodes], dtype=np.float64)
+    phi = np.array([n.phi for n in nodes], dtype=np.float64)
+
+    # Initial pairwise Delta R^2 matrix
+    d_eta = eta[:, None] - eta[None, :]
+    d_phi = np.abs(phi[:, None] - phi[None, :])
+    d_phi = np.where(d_phi > np.pi, 2 * np.pi - d_phi, d_phi)
+    dist_mat = d_eta ** 2 + d_phi ** 2
+    np.fill_diagonal(dist_mat, np.inf)
+
     while len(nodes) > 1:
-        n = len(nodes)
-        min_dr2 = float("inf")
-        min_i = -1
-        min_j = -1
-
-        for i in range(n):
-            node_i = nodes[i]
-            for j in range(i + 1, n):
-                node_j = nodes[j]
-                dr = delta_r(node_i.eta, node_i.phi, node_j.eta, node_j.phi)
-                dr2 = dr ** 2
-                if dr2 < min_dr2:
-                    min_dr2 = dr2
-                    min_i = i
-                    min_j = j
-
-        # If closest pair is separated by more than jet radius R_0, clustering terminates
+        min_idx = int(np.argmin(dist_mat))
+        min_dr2 = float(dist_mat.flat[min_idx])
         if min_dr2 > r0_sq:
             break
 
-        # Merge pair into parent node
-        p4_merged = nodes[min_i].p4 + nodes[min_j].p4
-        merged_node = ClusterNode(p4_merged, child1=nodes[min_i], child2=nodes[min_j])
+        i, j = np.unravel_index(min_idx, dist_mat.shape)
+        if i > j:
+            i, j = j, i
 
-        # Replace children with parent
-        nodes = [nodes[k] for k in range(n) if k != min_i and k != min_j] + [merged_node]
+        merged_p4 = nodes[i].p4 + nodes[j].p4
+        merged_node = ClusterNode(merged_p4, child1=nodes[i], child2=nodes[j])
+
+        # Remove higher index j first to preserve index i
+        nodes.pop(j)
+        nodes.pop(i)
+
+        mask = np.ones(dist_mat.shape[0], dtype=bool)
+        mask[i] = False
+        mask[j] = False
+        dist_mat = dist_mat[mask][:, mask]
+        eta = eta[mask]
+        phi = phi[mask]
+
+        if len(nodes) > 0:
+            d_eta_new = np.abs(eta - merged_node.eta)
+            d_phi_new = np.abs(phi - merged_node.phi)
+            d_phi_new = np.where(d_phi_new > np.pi, 2 * np.pi - d_phi_new, d_phi_new)
+            new_col = (d_eta_new ** 2 + d_phi_new ** 2).reshape(-1, 1)
+
+            dist_mat = np.hstack([dist_mat, new_col])
+            new_row = np.append(new_col.flatten(), np.inf).reshape(1, -1)
+            dist_mat = np.vstack([dist_mat, new_row])
+
+            eta = np.append(eta, merged_node.eta)
+            phi = np.append(phi, merged_node.phi)
+
+        nodes.append(merged_node)
 
     # Sort final jets by descending pT
     nodes.sort(key=lambda node: node.pt, reverse=True)
