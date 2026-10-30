@@ -1,0 +1,50 @@
+{
+  "experiment_family": "score_decorrelation",
+  "parent_reference": "controlled_structure_f5baacd",
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 5000,
+    "eval_limit": 500
+  },
+  "training": {
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 42
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0
+  },
+  "experiment_name": "gat_baseline_ref_s42",
+  "description": "Un-Decorrelated Control Reference (lambda_adv = 0.0, seed 42)",
+  "seed": 42,
+  "model": {
+    "architecture_type": "score_decorrelated_gat",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4,
+    "decorrelation_type": "disco",
+    "score_type": "pt_only"
+  },
+  "objectives": {
+    "loss_recon_type": "mse",
+    "met_loss_weight": 0.1,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "output_dir": "experiments/score_decorrelation/gat_baseline_ref_s42",
+  "metadata": {
+    "model_class": "score_disco_pt_only",
+    "decorrelation_mechanism": "score_level"
+  }
+}

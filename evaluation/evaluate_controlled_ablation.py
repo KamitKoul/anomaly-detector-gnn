@@ -198,7 +198,8 @@ def evaluate_controlled_experiments(
                 if len(buffer) >= 128:
                     batched = Batch.from_data_list(buffer).to(device)
                     with torch.no_grad():
-                        recon_x, _ = model(batched.x, batched.edge_index, batched.batch)
+                        out = model(batched.x, batched.edge_index, batched.batch)
+                        recon_x = out[0] if isinstance(out, (tuple, list)) else out
                         diff_sq = (recon_x - batched.x).pow(2)
                         err_pt = diff_sq[:, 0]
                         err_ang = diff_sq[:, 1:].mean(dim=1)
@@ -220,7 +221,8 @@ def evaluate_controlled_experiments(
             if buffer:
                 batched = Batch.from_data_list(buffer).to(device)
                 with torch.no_grad():
-                    recon_x, _ = model(batched.x, batched.edge_index, batched.batch)
+                    out = model(batched.x, batched.edge_index, batched.batch)
+                    recon_x = out[0] if isinstance(out, (tuple, list)) else out
                     diff_sq = (recon_x - batched.x).pow(2)
                     err_pt = diff_sq[:, 0]
                     err_ang = diff_sq[:, 1:].mean(dim=1)

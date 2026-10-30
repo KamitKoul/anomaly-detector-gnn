@@ -156,24 +156,55 @@ class ScoreGRLAdversary(nn.Module):
 class ScoreDecorrelatedNodeGNN(nn.Module):
     """
     GNN Autoencoder with Score-Level Mass Decorrelation (Score-GRL or DisCo).
-    The anomaly score S(G) = (1 / |V|) sum_i ||x_i - hat{x}_i||^2 is computed
-    in the forward pass, and the adversary or DisCo penalty acts directly on S(G).
+    The anomaly score S(G) is computed in the forward pass directly from particle
+    reconstruction errors, and the adversary or DisCo penalty acts directly on S(G).
     """
 
-    def __init__(self, base_model: nn.Module, decorrelation_type: str = "grl", hidden_dim: int = 32):
+    def __init__(
+        self,
+        base_model: nn.Module,
+        decorrelation_type: str = "grl",
+        hidden_dim: int = 32,
+        score_type: str = "pt_only",
+        pt_weight: float = 0.8,
+        ang_weight: float = 0.2,
+    ):
         super().__init__()
         self.base_model = base_model
-        self.decorrelation_type = decorrelation_type
-        if decorrelation_type == "grl":
+        self.decorrelation_type = decorrelation_type.lower()
+        self.score_type = score_type.lower()
+        self.pt_weight = pt_weight
+        self.ang_weight = ang_weight
+
+        if self.decorrelation_type == "grl":
             self.score_adversary = ScoreGRLAdversary(hidden_dim=hidden_dim)
         else:
             self.score_adversary = None
 
+    def __getattr__(self, name: str):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            base = self.__dict__.get("_modules", {}).get("base_model")
+            if base is not None and hasattr(base, name):
+                return getattr(base, name)
+            raise
+
     def forward(self, x, edge_index, batch, alpha: float = 1.0):
         recon_x, pred_met = self.base_model(x, edge_index, batch)
 
-        # Compute event-level scalar anomaly score per graph in batch
-        node_err = (recon_x - x).pow(2).mean(dim=1)
+        # Compute per-node error based on score_type
+        if self.score_type == "pt_only":
+            node_err = (recon_x[:, 0] - x[:, 0]).pow(2)
+        elif self.score_type == "weighted":
+            pt_err = (recon_x[:, 0] - x[:, 0]).pow(2)
+            ang_err = (recon_x[:, 1:] - x[:, 1:]).pow(2).mean(dim=1)
+            node_err = self.pt_weight * pt_err + self.ang_weight * ang_err
+        elif self.score_type == "ang_only":
+            node_err = (recon_x[:, 1:] - x[:, 1:]).pow(2).mean(dim=1)
+        else:  # "full"
+            node_err = (recon_x - x).pow(2).mean(dim=1)
+
         num_g = int(batch.max().item()) + 1 if batch is not None else 1
         device = x.device
         if batch is not None:

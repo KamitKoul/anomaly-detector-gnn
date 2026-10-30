@@ -59,6 +59,8 @@ from src.run_lhco_gnn import (
 )
 from src.adversarial_unlearning_ae import (
     AdversarialNodeGNN,
+    ScoreDecorrelatedNodeGNN,
+    compute_distance_correlation,
     compute_invariant_mass,
 )
 
@@ -125,7 +127,7 @@ def load_training_dataset(
     log_pt = config.graph_construction.log_pt
     include_met = config.graph_construction.include_met_node
     phi_mode = config.graph_construction.phi_met_mode
-    is_adversarial = (arch_type == "adversarial_gat") or (config.objectives.adv_loss_weight > 0)
+    is_adversarial = (arch_type in ("adversarial_gat", "score_decorrelated_gat")) or (config.objectives.adv_loss_weight > 0)
     mass_norm = config.objectives.mass_norm_gev
 
     for chunk in stream_filtered_events(str(bg_path), is_signal=False, chunk_size=1000):
@@ -225,6 +227,34 @@ def train_single_epoch(
                     if lambda_adv > 0.0 and hasattr(batch, "mass"):
                         loss_adv = F.mse_loss(pred_mass.view(-1, 1), batch.mass.view(-1, 1))
                         loss = loss + lambda_adv * loss_adv
+                    else:
+                        loss_adv = torch.tensor(0.0, device=device)
+
+                elif isinstance(model, ScoreDecorrelatedNodeGNN):
+                    recon_x, pred_met, scores, pred_mass = model(
+                        batch.x, batch.edge_index, batch.batch, alpha=grl_alpha
+                    )
+                    loss_recon = F.mse_loss(recon_x, batch.x)
+                    loss = loss_recon
+
+                    if lambda_met > 0.0:
+                        loss_met = F.mse_loss(pred_met, batch.y.view(-1, 2))
+                        loss = loss + lambda_met * loss_met
+                    else:
+                        loss_met = torch.tensor(0.0, device=device)
+
+                    if model.decorrelation_type == "grl":
+                        if lambda_adv > 0.0 and hasattr(batch, "mass"):
+                            loss_adv = F.mse_loss(pred_mass.view(-1, 1), batch.mass.view(-1, 1))
+                            loss = loss + lambda_adv * loss_adv
+                        else:
+                            loss_adv = torch.tensor(0.0, device=device)
+                    elif model.decorrelation_type == "disco":
+                        if lambda_adv > 0.0 and hasattr(batch, "mass"):
+                            loss_adv = compute_distance_correlation(scores, batch.mass.view(-1))
+                            loss = loss + lambda_adv * loss_adv
+                        else:
+                            loss_adv = torch.tensor(0.0, device=device)
                     else:
                         loss_adv = torch.tensor(0.0, device=device)
 

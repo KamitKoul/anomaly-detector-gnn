@@ -570,6 +570,12 @@ def create_model(config):
     elif arch == "adversarial_gat":
         from src.adversarial_unlearning_ae import AdversarialNodeGNN
         return AdversarialNodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+    elif arch == "score_decorrelated_gat":
+        from src.adversarial_unlearning_ae import ScoreDecorrelatedNodeGNN
+        decorr_type = getattr(m_cfg, "decorrelation_type", "grl") if hasattr(config, "model") else m_cfg.get("decorrelation_type", "grl")
+        score_type = getattr(m_cfg, "score_type", "pt_only") if hasattr(config, "model") else m_cfg.get("score_type", "pt_only")
+        base = NodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+        return ScoreDecorrelatedNodeGNN(base, decorrelation_type=decorr_type, hidden_dim=hidden_dim, score_type=score_type)
     else:
         raise ValueError(f"Unsupported architecture_type: {arch}")
 

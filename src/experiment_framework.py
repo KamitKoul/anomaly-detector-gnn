@@ -33,6 +33,7 @@ VALID_FAMILIES = (
     "met_weight",
     "mass_decorrelation",
     "controlled_structure",
+    "score_decorrelation",
 )
 
 
@@ -55,10 +56,12 @@ class TrainingConfig:
 
 @dataclass
 class ModelConfig:
-    architecture_type: str = "gat_autoencoder"  # gat_autoencoder, baseline_mlp, adversarial_gat
+    architecture_type: str = "gat_autoencoder"  # gat_autoencoder, baseline_mlp, adversarial_gat, score_decorrelated_gat
     input_dim: int = 3
     hidden_dim: int = 32
     num_heads: int = 4
+    decorrelation_type: str = "grl"  # "grl" (Adversary with GRL) or "disco" (Distance Correlation)
+    score_type: str = "pt_only"  # "pt_only", "weighted", "full", "ang_only"
 
 
 @dataclass
