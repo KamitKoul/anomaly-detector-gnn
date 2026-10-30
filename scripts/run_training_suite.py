@@ -238,7 +238,7 @@ def main():
         "--family",
         type=str,
         default="score_decorrelation",
-        choices=["score_decorrelation", "controlled_structure", "architecture", "graph_construction", "met_weight"],
+        choices=["score_decorrelation", "controlled_structure", "hybrid_pointnet_gat", "architecture", "graph_construction", "met_weight"],
         help="Experiment family to execute",
     )
     parser.add_argument("--force", action="store_true", help="Force re-training even if checkpoint exists")

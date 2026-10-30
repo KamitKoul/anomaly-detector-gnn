@@ -570,6 +570,87 @@ class DeepSetsPointNet(nn.Module):
 
 
 ########################################
+# CONTROLLED ARCHITECTURE 5: HYBRID RELATIONAL POINTNET-GAT
+########################################
+
+class PointNetGATHybrid(nn.Module):
+    """
+    Hybrid Relational-PointNet Autoencoder for Collider Anomaly Detection.
+    
+    Fuses local pairwise relational attention (subjet substructure & energy flow)
+    with global permutation-invariant point cloud context (event shape & angular moments).
+    
+    Architecture (~7.9k parameters):
+      1. Local Relational GAT Branch:
+         conv1: GATConv(3 -> 16, heads=4, concat=True) -> ELU (64 dim)
+         conv2: GATConv(64 -> 32, heads=1, concat=False) -> ELU (32 dim)
+      2. Global PointNet Branch:
+         point_phi: Linear(3 -> 32) -> ELU -> Linear(32 -> 32) -> ELU (32 dim)
+         rho: global_mean_pool(phi, batch) (32 dim)
+      3. Multi-Scale Context Fusion:
+         h_fused = [h_gat (32), phi (32), rho_expanded (32)] (96 dim)
+      4. Conditioned Particle Decoder:
+         Linear(96 -> 32) -> ELU -> Linear(32 -> 16) -> ELU -> Linear(16 -> 3)
+      5. Global MET Prediction Head:
+         Linear(32 -> 16) -> ELU -> Linear(16 -> 2) from rho
+    """
+
+    def __init__(self, input_dim=3, hidden_dim=32, num_heads=4):
+        super().__init__()
+        # 1. Local Relational GAT Branch
+        self.conv1 = GATConv(input_dim, 16, heads=num_heads, concat=True)
+        self.conv2 = GATConv(16 * num_heads, hidden_dim, heads=1, concat=False)
+
+        # 2. Global PointNet Branch
+        self.point_phi = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ELU(),
+        )
+
+        # 3. Conditioned Particle Reconstruction Decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim * 3, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, input_dim),
+        )
+
+        # 4. Global MET Head
+        self.met_head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ELU(),
+            nn.Linear(16, 2),
+        )
+
+    def encode(self, x, edge_index, batch=None):
+        # Local Relational GAT
+        h_gat = F.elu(self.conv1(x, edge_index))
+        h_gat = F.elu(self.conv2(h_gat, edge_index))
+
+        # Global PointNet
+        phi = self.point_phi(x)
+        if batch is not None:
+            rho = global_mean_pool(phi, batch)
+            rho_expanded = rho[batch]
+        else:
+            rho = phi.mean(dim=0, keepdim=True)
+            rho_expanded = rho.expand(phi.size(0), -1)
+
+        # Multi-scale fusion
+        h_fused = torch.cat([h_gat, phi, rho_expanded], dim=-1)
+        return h_fused, rho
+
+    def forward(self, x, edge_index, batch=None):
+        h_fused, rho = self.encode(x, edge_index, batch)
+        recon_x = self.decoder(h_fused)
+        pred_met = self.met_head(rho)
+        return recon_x, pred_met
+
+
+########################################
 # MODEL FACTORY
 ########################################
 
@@ -581,7 +662,10 @@ def create_model(config):
       - 'gat_autoencoder': NodeGNN (GAT autoencoder with optional MET head)
       - 'node_wise_ae' / 'nodewise_ae': NodeWiseAE (independent per-particle autoencoder)
       - 'deepsets_pointnet' / 'pointnet': DeepSetsPointNet (permutation-invariant point cloud)
+      - 'pointnet_gat_hybrid' / 'hybrid_pointnet_gat': PointNetGATHybrid (fused relational + point cloud)
+      - 'score_decorrelated_hybrid': ScoreDecorrelatedNodeGNN wrapping PointNetGATHybrid
       - 'adversarial_gat': AdversarialNodeGNN (GAT autoencoder with GRL adversary head)
+      - 'score_decorrelated_gat': ScoreDecorrelatedNodeGNN (GAT with score-level DisCo/GRL)
     """
     if hasattr(config, "model"):
         m_cfg = config.model
@@ -606,6 +690,14 @@ def create_model(config):
         return NodeWiseAE(input_dim=input_dim, hidden_dim=hidden_dim)
     elif arch in ("deepsets_pointnet", "pointnet"):
         return DeepSetsPointNet(input_dim=input_dim, hidden_dim=hidden_dim)
+    elif arch in ("pointnet_gat_hybrid", "hybrid_pointnet_gat"):
+        return PointNetGATHybrid(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+    elif arch in ("score_decorrelated_hybrid", "hybrid_decorrelated"):
+        from src.adversarial_unlearning_ae import ScoreDecorrelatedNodeGNN
+        decorr_type = getattr(m_cfg, "decorrelation_type", "disco") if hasattr(config, "model") else m_cfg.get("decorrelation_type", "disco")
+        score_type = getattr(m_cfg, "score_type", "weighted") if hasattr(config, "model") else m_cfg.get("score_type", "weighted")
+        base = PointNetGATHybrid(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
+        return ScoreDecorrelatedNodeGNN(base, decorrelation_type=decorr_type, hidden_dim=hidden_dim, score_type=score_type)
     elif arch == "adversarial_gat":
         from src.adversarial_unlearning_ae import AdversarialNodeGNN
         return AdversarialNodeGNN(input_dim=input_dim, hidden_dim=hidden_dim, num_heads=num_heads)
