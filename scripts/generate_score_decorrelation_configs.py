@@ -115,7 +115,7 @@ EXPERIMENT_MATRIX = [
         "lambda_met": 0.1,
         "grl_alpha": 1.0,
     },
-    # 4. DisCo on Weighted Score (0.8 pT + 0.2 Ang)
+    # 4. DisCo on Weighted Score (0.8 pT + 0.2 Ang) (Seeds 42, 123, 999)
     {
         "name": "gat_score_disco_weighted_s42",
         "seed": 42,
@@ -126,11 +126,51 @@ EXPERIMENT_MATRIX = [
         "lambda_met": 0.1,
         "grl_alpha": 1.0,
     },
-    # 5. Baseline Reference Control (Zero Adversary)
+    {
+        "name": "gat_score_disco_weighted_s123",
+        "seed": 123,
+        "desc": "Score-Level DisCo on Weighted Anomaly Score (0.8 pT + 0.2 Ang, lambda_adv = 1.0, seed 123)",
+        "decorr_type": "disco",
+        "score_type": "weighted",
+        "lambda_adv": 1.0,
+        "lambda_met": 0.1,
+        "grl_alpha": 1.0,
+    },
+    {
+        "name": "gat_score_disco_weighted_s999",
+        "seed": 999,
+        "desc": "Score-Level DisCo on Weighted Anomaly Score (0.8 pT + 0.2 Ang, lambda_adv = 1.0, seed 999)",
+        "decorr_type": "disco",
+        "score_type": "weighted",
+        "lambda_adv": 1.0,
+        "lambda_met": 0.1,
+        "grl_alpha": 1.0,
+    },
+    # 5. Baseline Reference Control (Zero Adversary) (Seeds 42, 123, 999)
     {
         "name": "gat_baseline_ref_s42",
         "seed": 42,
         "desc": "Un-Decorrelated Control Reference (lambda_adv = 0.0, seed 42)",
+        "decorr_type": "disco",
+        "score_type": "pt_only",
+        "lambda_adv": 0.0,
+        "lambda_met": 0.1,
+        "grl_alpha": 1.0,
+    },
+    {
+        "name": "gat_baseline_ref_s123",
+        "seed": 123,
+        "desc": "Un-Decorrelated Control Reference (lambda_adv = 0.0, seed 123)",
+        "decorr_type": "disco",
+        "score_type": "pt_only",
+        "lambda_adv": 0.0,
+        "lambda_met": 0.1,
+        "grl_alpha": 1.0,
+    },
+    {
+        "name": "gat_baseline_ref_s999",
+        "seed": 999,
+        "desc": "Un-Decorrelated Control Reference (lambda_adv = 0.0, seed 999)",
         "decorr_type": "disco",
         "score_type": "pt_only",
         "lambda_adv": 0.0,
