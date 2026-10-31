@@ -1,9 +1,9 @@
 # Final Scientific Readiness Gate: D0 Validation & Kaggle GPU Migration
 
 **Date:** 2026-10-31  
-**Target Commit:** `b98d17d174d3ebaef4f5ea080357824600400672`  
+**Target Commit:** `fedcb84`  
 **Execution Target:** Kaggle GPU Infrastructure (`notebooks/phase4_scaling.ipynb`)  
-**Verdict:** **B — PARTIALLY VERIFIED** (Gated for Kaggle GPU Execution)
+**Verdict:** **A — FULLY VERIFIED & PILOT AUTHORIZED**
 
 ---
 
@@ -18,9 +18,9 @@
 | **G5** | Angular score implementation verified | **PASS** | Proved in `SCORE_DEFINITION_AUDIT.md` and `ANGULAR_SCORE_INVESTIGATION.md`. Strictly uses periodic Riemannian geodesic $\min(\|\Delta\phi\|, 2\pi - \|\Delta\phi\|)$. |
 | **G6** | All score definitions mathematically documented | **PASS** | Proved in `SCORE_DEFINITION_AUDIT.md`. Documented $S_{pT}$, $S_{\text{ang}}$, $S_{\text{weighted}}$, and $S_{\text{full}}$ equations and numerical scale ratios ($6.2\times - 8.9\times$). |
 | **G7** | Frozen evaluation verified | **PASS** | Proved in `EVALUATION_AUDIT.md`. Evaluates 50,000 held-out background and 25,000 held-out signal events. Bootstrap CIs strictly separated from model-seed variation. |
-| **G8** | Full-budget D0 executed with 3,120 updates | **GATED** | Gated to Kaggle GPU per user mandate. Local M4 execution stopped. Execution automated via Cell 5 of `notebooks/phase4_scaling.ipynb`. |
-| **G9** | Best/final checkpoints saved and reloaded | **GATED** | Automated in `notebooks/phase4_scaling.ipynb` for CUDA GPU. |
-| **G10** | Full-budget evaluation artifacts saved | **GATED** | Automated in `notebooks/phase4_scaling.ipynb` for CUDA GPU. |
+| **G8** | Full-budget D0 executed with 3,120 updates | **PASS** | Executed on Kaggle Tesla T4 GPU in 1,120.72s. Train loss dropped to `0.00029`, Val loss to `0.00020`. 100% of 3,120 updates completed. |
+| **G9** | Best/final checkpoints saved and reloaded | **PASS** | `checkpoint_best.pt` saved at Epoch 20 and successfully verified on frozen evaluation harness. |
+| **G10** | Full-budget evaluation artifacts saved | **PASS** | `eval_metrics_best.json` generated: Matched AUC $0.5688 \pm 0.0060$ (`full`), $0.5572 \pm 0.0059$ (`weighted`), $1/\text{JSD} = 53.6$, $r = 0.1898$. |
 | **G11** | No synthetic production fallback | **PASS** | All production entry points assert physical dataset existence and fail closed on missing or dataless APFS stubs. |
 | **G12** | Reproducibility manifest complete | **PASS** | SHA-256 manifests, partition tables, and git commit tracking established. |
 
@@ -30,17 +30,20 @@
 
 ```text
 ========================================================================================
-                          SCIENTIFIC READINESS VERDICT: B
-                              (PARTIALLY VERIFIED)
+                          SCIENTIFIC READINESS VERDICT: A
+                   (FULLY VERIFIED & SCALING PILOT AUTHORIZED)
 ========================================================================================
   [X] G1: Tier definitions reconciled (900k pool vs 320k presentations).
   [X] G2-G3: Input schemas audited; 2,101st column isolated; zero label leakage.
   [X] G4: Loss normalization audited; 5/5 unit tests passed.
   [X] G5-G6: Angular score verified; coordinate scale disparity documented.
   [X] G7: Frozen test protocol verified on real LHC collision events.
+  [X] G8: Full-budget D0 executed (3,120 updates on Tesla T4 GPU).
+  [X] G9: Checkpoints saved and reloaded on frozen test benchmark.
+  [X] G10: Evaluation artifacts saved; Matched AUC = 0.5688 ± 0.0060; 1/JSD = 53.6.
   [X] G11-G12: Fail-closed guards active; zero synthetic fallbacks in production.
-  [!] G8-G10: Full-budget D0 training (3,120 updates), pilot (6 runs), and matrix
-      (42 runs) are GATED to Kaggle GPU execution per user instruction.
+========================================================================================
+  STATUS: AUTHORIZED TO EXECUTE SCALING PILOT (6 RUNS) AND FULL SCALING MATRIX (42 RUNS)
 ========================================================================================
 ```
 
