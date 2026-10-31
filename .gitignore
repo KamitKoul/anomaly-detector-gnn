@@ -9,6 +9,7 @@ __pycache__/
 *.root
 /data/
 /scratch/
+/configs/large_scale_scaling/
 
 # Virtual environments
 .venvi/
