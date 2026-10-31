@@ -20,7 +20,7 @@ import os
 import time
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
