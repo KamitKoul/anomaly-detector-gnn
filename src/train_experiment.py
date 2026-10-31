@@ -183,8 +183,9 @@ def train_single_epoch(
     device: torch.device,
     config: ExperimentConfig,
     dataset_type: str,
+    scaler: Optional[torch.cuda.amp.GradScaler] = None,
 ) -> Dict[str, float]:
-    """Runs a single epoch of training respecting config loss weights."""
+    """Runs a single epoch of training respecting config loss weights and CUDA AMP scaling."""
     model.train()
     total_loss = 0.0
     recon_loss_sum = 0.0
@@ -197,7 +198,7 @@ def train_single_epoch(
     lambda_adv = config.objectives.adv_loss_weight
     grl_alpha = config.objectives.grl_alpha
 
-    use_amp = (device.type == "cuda")
+    use_amp = (device.type == "cuda") and (scaler is not None and scaler.is_enabled())
 
     for batch in loader:
         optimizer.zero_grad()
@@ -286,10 +287,18 @@ def train_single_epoch(
                 else:
                     raise ValueError(f"Unknown model class: {type(model)}")
 
-        loss.backward()
-        total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=50.0)
+        if use_amp and scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=50.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=50.0)
+            optimizer.step()
+
         grad_norm_sum += float(total_norm.item() if hasattr(total_norm, "item") else total_norm)
-        optimizer.step()
 
         total_loss += loss.item()
         recon_loss_sum += loss_recon.item()
@@ -319,6 +328,7 @@ def run_training_experiment(
     override_limit: Optional[int] = None,
     override_device: Optional[str] = None,
     override_output_dir: Optional[str] = None,
+    override_num_workers: Optional[int] = None,
     is_smoke_test: bool = False,
 ) -> int:
     """Executes or dry-runs an experiment training pipeline."""
@@ -402,24 +412,43 @@ def run_training_experiment(
     dataset, dataset_type = load_training_dataset(config, limit=train_limit, repo_root=REPO_ROOT)
     print(f"[INFO] Loaded {len(dataset)} items (type: {dataset_type}).")
 
-    # Create data loader with pinned host memory for direct GPU DMA transfers
+    # Create data loader with pinned host memory and asynchronous worker prefetching
     batch_size = config.training.batch_size
     pin_mem = (device.type == "cuda")
-    if dataset_type == "flat":
-        loader = TorchDataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_mem)
+    if override_num_workers is not None:
+        num_workers = override_num_workers
     else:
-        loader = PyGDataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_mem)
+        num_workers = 2 if device.type == "cuda" else 0
 
-    # Initialize optimizer
+    loader_kwargs = {
+        "batch_size": batch_size,
+        "shuffle": True,
+        "pin_memory": pin_mem,
+        "num_workers": num_workers,
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = True
+        loader_kwargs["prefetch_factor"] = 2
+
+    if dataset_type == "flat":
+        loader = TorchDataLoader(dataset, **loader_kwargs)
+    else:
+        loader = PyGDataLoader(dataset, **loader_kwargs)
+
+    # Initialize optimizer and AMP gradient scaler
     lr = config.training.learning_rate
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    try:
+        scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
+    except Exception:
+        scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
 
     history = []
-    print(f"[INFO] Starting training for {epochs} epochs...")
+    print(f"[INFO] Starting training for {epochs} epochs (workers={num_workers}, pin_memory={pin_mem}, amp={device.type == 'cuda'})...")
 
     for epoch in range(1, epochs + 1):
         ep_t0 = time.time()
-        metrics = train_single_epoch(model, loader, optimizer, device, config, dataset_type)
+        metrics = train_single_epoch(model, loader, optimizer, device, config, dataset_type, scaler=scaler)
         ep_t1 = time.time()
         metrics["epoch"] = epoch
         metrics["epoch_time_sec"] = round(ep_t1 - ep_t0, 3)
@@ -523,6 +552,12 @@ def main():
         help="Optional override for output directory",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Optional override for DataLoader num_workers (default: 2 on CUDA, 0 on CPU/MPS)",
+    )
+    parser.add_argument(
         "--smoke-test",
         action="store_true",
         help="Flag to mark execution as a pipeline smoke test",
@@ -543,6 +578,7 @@ def main():
             override_limit=args.limit,
             override_device=args.device,
             override_output_dir=args.output_dir,
+            override_num_workers=args.num_workers,
             is_smoke_test=args.smoke_test,
         )
     )

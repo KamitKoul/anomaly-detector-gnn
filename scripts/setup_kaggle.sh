@@ -173,5 +173,7 @@ fi
 
 echo -e "\n========================================================================"
 echo "  KAGGLE SETUP COMPLETED SUCCESSFULLY"
+echo "  To diagnose GPU utilization & throughput benchmarks, run:"
+echo "    python scripts/diagnose_gpu_pipeline.py"
 echo "  Ready to execute Phase 3 architecture ablation experiments on CUDA GPU."
 echo "========================================================================"

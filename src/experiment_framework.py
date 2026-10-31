@@ -34,6 +34,8 @@ VALID_FAMILIES = (
     "mass_decorrelation",
     "controlled_structure",
     "score_decorrelation",
+    "hybrid_pointnet_gat",
+    "large_scale_scaling",
 )
 
 
@@ -43,6 +45,10 @@ class DatasetConfig:
     signal_path: str = "data/W_prime_signal.h5"
     train_limit: int = 5000
     eval_limit: int = 500
+    signal_limit: int = 5000
+    train_indices_file: Optional[str] = None
+    val_indices_file: Optional[str] = None
+    test_indices_file: Optional[str] = None
 
 
 @dataclass
@@ -75,6 +81,7 @@ class GraphConstructionConfig:
 @dataclass
 class ObjectivesConfig:
     loss_recon_type: str = "mse"
+    recon_loss_weight: float = 1.0
     met_loss_weight: float = 0.1
     adv_loss_weight: float = 0.0
     grl_alpha: float = 1.0
@@ -85,6 +92,7 @@ class ObjectivesConfig:
 class AnomalyScoringConfig:
     metric: str = "reconstruction_mse"
     percentile_threshold: float = 90.0
+    score_type: str = "weighted"
 
 
 @dataclass
@@ -101,6 +109,7 @@ class ExperimentConfig:
     objectives: ObjectivesConfig = field(default_factory=ObjectivesConfig)
     anomaly_scoring: AnomalyScoringConfig = field(default_factory=AnomalyScoringConfig)
     output_dir: str = ""
+    regime: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

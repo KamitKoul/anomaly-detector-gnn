@@ -1,0 +1,48 @@
+{
+  "experiment_name": "scale_expB_d4_250k_s999",
+  "experiment_family": "large_scale_scaling",
+  "parent_reference": "baseline_remediation_b98d17d",
+  "description": "Experiment B (Equal Updates ~10k): Scaling study with 250,000 events, 5 epochs, seed 999",
+  "dataset": {
+    "background_path": "data/events_LHCO2020_backgroundMC_Pythia.h5",
+    "signal_path": "data/W_prime_signal.h5",
+    "train_limit": 250000,
+    "train_indices_file": "data/splits/bg_train_d4_250k.npy",
+    "val_indices_file": "data/splits/bg_val_50k.npy",
+    "test_indices_file": "data/splits/bg_test_50k.npy",
+    "eval_limit": 50000,
+    "signal_limit": 25000
+  },
+  "training": {
+    "epochs": 5,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "seed": 999
+  },
+  "graph_construction": {
+    "delta_r_threshold": 0.4,
+    "log_pt": true,
+    "include_met_node": true,
+    "phi_met_mode": "atan2"
+  },
+  "anomaly_scoring": {
+    "metric": "reconstruction_mse",
+    "percentile_threshold": 90.0,
+    "score_type": "weighted"
+  },
+  "objectives": {
+    "recon_loss_weight": 1.0,
+    "met_loss_weight": 0.001,
+    "adv_loss_weight": 0.0,
+    "grl_alpha": 1.0,
+    "mass_norm_gev": 1000.0
+  },
+  "model": {
+    "architecture_type": "pointnet_gat_hybrid",
+    "input_dim": 3,
+    "hidden_dim": 32,
+    "num_heads": 4
+  },
+  "regime": "Experiment B (Equal Optimizer Updates)"
+}

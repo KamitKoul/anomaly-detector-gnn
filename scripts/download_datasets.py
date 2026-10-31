@@ -30,7 +30,15 @@ SIG_URL = "https://zenodo.org/api/records/4536377/files/events_anomalydetection.
 
 def is_valid(p: Path) -> bool:
     try:
-        return p.exists() and p.stat().st_size > MIN_SIZE_BYTES
+        if not p.exists():
+            return False
+        st = p.stat()
+        if st.st_size <= MIN_SIZE_BYTES:
+            return False
+        # On macOS APFS, evicted iCloud files report st_blocks == 0
+        if sys.platform == "darwin" and hasattr(st, "st_blocks") and st.st_blocks == 0:
+            return False
+        return True
     except Exception:
         return False
 
