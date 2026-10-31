@@ -194,10 +194,6 @@ def run_experiment_b_tier(
             num_workers=workers,
             pin_memory=pin_mem,
         )
-            batch_size=batch_size,
-            num_workers=workers,
-            pin_memory=pin_mem,
-        )
 
     # Cyclical sampler tracking
     update_count = 0
